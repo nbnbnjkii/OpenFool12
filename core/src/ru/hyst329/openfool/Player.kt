@@ -360,6 +360,7 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
                 val r1 = (c1.rank.value + 11) % 13
                 val r2 = (c2.rank.value + 11) % 13
                 when (sortingMode) {
+                    Player.SortingMode.UNSORTED -> return@Comparator 0
                     Player.SortingMode.SUIT_ASCENDING -> {
                         if (v1 < v2) return@Comparator -1
                         if (v1 > v2) return@Comparator 1

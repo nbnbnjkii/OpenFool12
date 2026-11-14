@@ -1,6 +1,5 @@
 package ru.hyst329.openfool
 
-import java.awt.Event
 import java.util.*
 import com.badlogic.gdx.scenes.scene2d.EventListener
 import ru.hyst329.openfool.PlayerTesting.GameState.BEATEN

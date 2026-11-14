@@ -33,6 +33,7 @@ import kotlin.properties.Delegates
 internal class SettingsScreen(private val game: OpenFoolGame) : Screen {
     private val DECKS: MutableMap<String, String>
     private val LANGUAGES: MutableMap<String, String>
+    private val neon = NeonTheme()
     private val stage: Stage
     private var backgroundColor: Color? = null
     private var deck: String? = null
@@ -76,6 +77,7 @@ internal class SettingsScreen(private val game: OpenFoolGame) : Screen {
         SORTING_MODES.add(game.localeBundle.get("SortingRankDescending"))
         // Initialise the stage
         stage = Stage(FitViewport(800f, 480f))
+        neon.image(stage,"lobby",0f,0f,800f,480f)
         Gdx.input.inputProcessor = stage
 
         backgroundColor = Color(game.preferences.getInteger(BACKGROUND_COLOR, 0x33cc4dff))
@@ -257,6 +259,8 @@ internal class SettingsScreen(private val game: OpenFoolGame) : Screen {
 
     override fun dispose() {
         picker.dispose()
+        stage.dispose()
+        neon.dispose()
     }
 
 

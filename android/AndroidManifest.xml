@@ -12,7 +12,8 @@
         <activity
             android:name="ru.hyst329.openfool.AndroidLauncher"
             android:label="@string/app_name" 
-            android:screenOrientation="landscape"
+            android:screenOrientation="portrait"
+            android:exported="true"
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
