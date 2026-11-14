@@ -1197,7 +1197,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         actor.actions.size == 0
 
     private fun onPlayingArea(x: Float,y: Float): Boolean = if (screenOrientationIsPortrait)
-        x in 90f..390f && y in 355f..695f else x in 140f..650f && y in 215f..360f
+        PortraitTableLayout.onTable(x,y) else x in 140f..650f && y in 215f..360f
 
     private fun attackAt(x: Float,y: Float): Int? = attackCards.indices.reversed().firstOrNull {
         val card = attackCards[it]
@@ -1309,7 +1309,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         private const val HH_AI_PORTRAIT = CARD_SCALE_AI_PORTRAIT * 270
         private const val HH_PLAYER_PORTRAIT = CARD_SCALE_PLAYER_PORTRAIT * 270
 
-        private val DECK_POSITION_PORTRAIT = floatArrayOf(332f, 804f)
+        private val DECK_POSITION_PORTRAIT = floatArrayOf(PortraitTableLayout.DECK_X, PortraitTableLayout.DECK_Y)
         private val DISCARD_PILE_POSITION_PORTRAIT = floatArrayOf(435 - HW_TABLE_PORTRAIT, 400 - HH_TABLE_PORTRAIT)
         private val PLAYER_POSITION_PORTRAIT = floatArrayOf(90 - HW_PLAYER_PORTRAIT, 195 - HH_PLAYER_PORTRAIT)
         private val AI_POSITION_PORTRAIT = floatArrayOf(40 - HW_AI_PORTRAIT, 800 - HH_AI_PORTRAIT)

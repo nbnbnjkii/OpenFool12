@@ -239,3 +239,26 @@ SQLite persists accounts/sessions/friends, but active matches and invites are in
 memory and close on server restart. Offline bot gameplay retains its existing
 wallet/perk rules. Server API and game tests are automated; VPS deployment and
 real multi-device gameplay have not been verified in this environment.
+
+## Friend table visual parity (0.12.0)
+
+Friend room creation now uses the same player-count, deck, mode, heading, Back,
+and primary-button geometry as bot setup. Its optional bot selector replaces the
+stake region; entering a room code has a separate view, not an overlapping field.
+The server API and free-match rules are unchanged; updating the VPS is unnecessary.
+
+The network table uses the local table background at full portrait size, the same
+HandFan algorithm and actual deck texture sizes, lowered/masked own hand, seats,
+HUD artwork, action slot, flag, wallet readout, table pairs and deck geometry.
+Opponent cards are backs only. The deck has a rotated exposed trump card and white
+count directly on the back, without a black badge; after the deck empties the
+trump caption and suit occupy the same positions as the local HUD. Local/net
+drop zones and deck coordinates are shared in PortraitTableLayout.
+
+Room code and a friend-invite icon remain above the table. Host Start is placed
+in the same action slot after Ready. Paid offline tools have dimmed matching icons
+with an explanatory message and never charge crystals in a network match. Network
+stakes remain zero. Server ownership, hidden hands, legality checks and turn
+deadlines are unchanged. New hand cards animate from the deck on match start.
+Automated geometry tests compare the fan for 1–52 cards across all deck widths.
+Real-phone screenshot parity and multi-device play still need manual verification.

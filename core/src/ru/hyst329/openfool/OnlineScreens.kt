@@ -94,40 +94,64 @@ internal class AuthScreen(game: OpenFoolGame,verify: Boolean=true) : OnlineScree
     override fun back() {Gdx.app.exit()}
 }
 
+/** Same visual rows and controls as BotSetupScreen; only the friend-specific extras differ. */
 internal class FriendSetupScreen(game: OpenFoolGame) : OnlineScreen(game) {
     private var capacity=6
     private var bots=0
     private var addBots=false
     private var deckSize=36
     private var pass=false
+    private var joining=false
     init {build()}
     private fun build() {
-        base("ИГРА С ДРУЗЬЯМИ")
-        theme.label(stage,"Мест за столом: $capacity (до 6 живых)",20f,819f,440f,40f,21)
-        for(n in 2..6)theme.button(stage,"$n",if(n==capacity)"green" else "slate",20f+(n-2)*90f,745f,80f,58f,25) {
+        base("")
+        status.setBounds(20f,126f,440f,43f)
+        theme.button(stage,"НАЗАД","slate",20f,924f,110f,48f,18) {
+            if(joining){joining=false;build()}else menu()
+        }
+        theme.button(stage,if(joining)"СОЗДАТЬ СТОЛ" else "ВВЕСТИ КОД","blue",280f,924f,180f,48f,18) {
+            joining=!joining;Gdx.input.setOnscreenKeyboardVisible(false);build()
+        }
+        theme.label(stage,"ИГРА С ДРУЗЬЯМИ",20f,834f,440f,60f,28)
+        if(joining) {
+            theme.label(stage,"КОД КОМНАТЫ",20f,679f,440f,40f,22)
+            val code=field("",580f);code.maxLength=4;code.messageText="4 цифры"
+            code.textFieldFilter=TextField.TextFieldFilter {_,c->c in '0'..'9'}
+            theme.button(stage,"ПРИСОЕДИНИТЬСЯ","green",25f,32f,430f,86f,26) {
+                Gdx.input.setOnscreenKeyboardVisible(false)
+                call("POST","/rooms/join",jsonObject("code" to code.text)) {game.screen=NetworkTableScreen(game,it.get("room"));dispose()}
+            }
+            status.setText("Введите код, который сообщил создатель комнаты.")
+            return
+        }
+        theme.label(stage,"Участников за столом (включая вас)",20f,765f,440f,40f,20)
+        for(n in 2..6)theme.button(stage,"$n",if(n==capacity)"purple" else "slate",20f+(n-2)*90f,679f,80f,70f,30) {
             capacity=n;bots=bots.coerceAtMost(n-2);if(deckSize<n*6)deckSize=36;build()
         }
-        theme.button(stage,if(addBots)"[X] ДОБАВИТЬ БОТОВ" else "[ ] ДОБАВИТЬ БОТОВ","purple",25f,649f,430f,60f,22) {
-            addBots=!addBots;if(addBots&&capacity>2)bots=1 else bots=0;build()
+        theme.label(stage,"КОЛОДА",20f,598f,440f,40f,22)
+        for((index,n) in listOf(24,36,52).withIndex())theme.button(stage,"$n карты",if(n==deckSize)"blue" else "slate",20f+index*150f,514f,140f,70f,22) {
+            if(n<capacity*6)status.setText("24 карты: максимум 4 участника по 6 карт")
+            else {deckSize=n;build()}
         }
-        theme.label(stage,if(addBots)"Ботов: $bots • минимум 2 места людям" else "По умолчанию — только живые игроки",20f,596f,440f,38f,19)
-        if(addBots)for(n in 0..capacity-2)theme.button(stage,"$n",if(n==bots)"green" else "slate",25f+n*86f,530f,76f,52f,23){bots=n;build()}
-        theme.button(stage,"Колода: $deckSize • сменить","slate",25f,448f,430f,55f,21) {
-            val decks=listOf(24,36,52).filter{it>=capacity*6};deckSize=decks[(decks.indexOf(deckSize)+1)%decks.size];build()
+        theme.label(stage,"РЕЖИМ ИГРЫ",20f,430f,440f,40f,22)
+        for((index,value) in listOf(false,true).withIndex())theme.button(stage,if(value)"ПЕРЕВОДНОЙ" else "ПОДКИДНОЙ",if(value==pass)"purple" else "slate",20f+index*225f,347f,215f,70f,20) {
+            pass=value;build()
         }
-        theme.button(stage,if(pass)"Переводной" else "Подкидной","slate",25f,375f,430f,55f,22){pass=!pass;build()}
-        theme.button(stage,"СОЗДАТЬ СТОЛ","green",25f,285f,430f,65f,25) {
+        theme.button(stage,if(addBots)"[X] ДОБАВИТЬ БОТОВ" else "[ ] ДОБАВИТЬ БОТОВ","slate",20f,272f,440f,54f,21) {
+            addBots=!addBots;bots=if(addBots&&capacity>2)1 else 0;build()
+        }
+        if(addBots) {
+            theme.label(stage,"Количество ботов (минимум 2 места людям)",20f,234f,440f,29f,15)
+            for(n in 0..capacity-2)theme.button(stage,"$n",if(n==bots)"purple" else "slate",25f+n*86f,178f,76f,48f,22){bots=n;build()}
+        } else theme.label(stage,"Только живые игроки • без ставок",20f,200f,440f,40f,19)
+        theme.button(stage,"СОЗДАТЬ КОМНАТУ","green",25f,32f,430f,86f,26) {
             call("POST","/rooms",jsonObject("capacity" to capacity,"addBots" to addBots,"bots" to bots,"deckSize" to deckSize,"pass" to pass)) {
                 game.screen=NetworkTableScreen(game,it.get("room"));dispose()
             }
         }
-        val code=field("",207f);code.maxLength=4;code.messageText="Код комнаты: 4 цифры"
-        code.textFieldFilter=TextField.TextFieldFilter {_,c->c in '0'..'9'}
-        theme.button(stage,"ПРИСОЕДИНИТЬСЯ ПО КОДУ","blue",25f,46f,430f,62f,21) {
-            call("POST","/rooms/join",jsonObject("code" to code.text)) {game.screen=NetworkTableScreen(game,it.get("room"));dispose()}
-        }
-        status.setText("Дружеские сетевые партии без ставок.\nСоздатель запускает игру после готовности всех.")
+        status.setText("Сетевые партии без ставок. Боты — только по вашему выбору.")
     }
+    override fun back(){if(joining){joining=false;build()}else menu()}
 }
 
 internal class FriendsScreen(game: OpenFoolGame,private val code: String?=null) : OnlineScreen(game) {
