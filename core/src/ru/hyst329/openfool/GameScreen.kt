@@ -517,7 +517,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 val cardActor = cardActors[card]
                 cardActor?.isFaceUp = (playerIndex == 0)
                 val position = handPosition(playerIndex)
-                val delta = (if (playerIndex == 0) playerDelta else aiDelta).clone()
+                val delta = handDelta(playerIndex)
                 val index = player.hand.size - 1
                 val posX = position[0] + index * delta[0]
                 val posY = position[1] + index * delta[1]
@@ -637,7 +637,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             for (i in 0 until thrower.hand.size) {
                 val cardActor = cardActors[thrower.hand[i]]
                 val position = handPosition(thrower.index)
-                val delta = (if (thrower.index == 0) playerDelta else aiDelta).clone()
+                val delta = handDelta(thrower.index)
                 val posX = position[0] + i * delta[0]
                 val posY = position[1] + i * delta[1]
                 //cardActor.addAction(Actions.moveTo(posX, posY, 0.1f));
@@ -677,7 +677,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             for (i in 0 until beater.hand.size) {
                 val cardActor = cardActors[beater.hand[i]]
                 val position = handPosition(beater.index)
-                val delta = (if (beater.index == 0) playerDelta else aiDelta).clone()
+                val delta = handDelta(beater.index)
                 val posX = position[0] + i * delta[0]
                 val posY = position[1] + i * delta[1]
                 //cardActor.addAction(Actions.moveTo(posX, posY, 0.1f));
@@ -717,7 +717,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             for (i in 0 until thrower.hand.size) {
                 val cardActor = cardActors[thrower.hand[i]]
                 val position = handPosition(thrower.index)
-                val delta = (if (thrower.index == 0) playerDelta else aiDelta).clone()
+                val delta = handDelta(thrower.index)
                 val posX = position[0] + i * delta[0]
                 val posY = position[1] + i * delta[1]
                 //cardActor.addAction(Actions.moveTo(posX, posY, 0.1f));
@@ -774,7 +774,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             val cardActor = cardActors[card]
             cardActor?.isFaceUp = (playerIndex == 0)
             val position = handPosition(playerIndex)
-            val delta = (if (playerIndex == 0) playerDelta else aiDelta).clone()
+            val delta = handDelta(playerIndex)
             val index = player.hand.size - 1
             val posX = position[0] + index * delta[0]
             val posY = position[1] + index * delta[1]
@@ -833,6 +833,12 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             return players[currentThrowerIndex]
         }
 
+    private fun handDelta(index: Int): FloatArray {
+        if (index != 0) return aiDelta.clone()
+        if (!screenOrientationIsPortrait) return playerDelta.clone()
+        return floatArrayOf(min(54f, 315f / kotlin.math.max(1, players[0].hand.size - 1)), 0f)
+    }
+
     private fun handPosition(index: Int): FloatArray {
         if (index == 0) return playerPosition.clone()
         if (screenOrientationIsPortrait) return when (index) {
@@ -854,7 +860,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         for (i in 0 until player.hand.size) {
             val cardActor = cardActors[player.hand[i]]
             val position = handPosition(player.index)
-            val delta = (if (player.index == 0) playerDelta else aiDelta).clone()
+            val delta = handDelta(player.index)
             val posX = position[0] + i * delta[0]
             val posY = position[1] + i * delta[1]
             cardActor?.setPosition(posX, posY)
