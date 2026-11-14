@@ -684,6 +684,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             attackCards[throwIndex] = throwCard
             val throwCardActor = cardActors[throwCard]
             throwCardActor?.isFaceUp = true
+            throwCardActor?.rotation = 0f
             tableGroup.addActor(throwCardActor)
             throwCardActor?.zIndex = 2 * throwIndex
             throwCardActor?.setScale(cardScaleTable)
@@ -725,6 +726,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             defenseCards[beatIndex] = beatCard
             val beatCardActor = cardActors[beatCard]
             beatCardActor?.isFaceUp = true
+            beatCardActor?.rotation = 0f
             tableGroup.addActor(beatCardActor)
             beatCardActor?.zIndex = 2 * beatIndex + 1
             beatCardActor?.setScale(cardScaleTable)
@@ -766,6 +768,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             attackCards[passIndex] = passCard
             val passCardActor = cardActors[passCard]
             passCardActor?.isFaceUp = true
+            passCardActor?.rotation = 0f
             tableGroup.addActor(passCardActor)
             passCardActor?.zIndex = 2 * passIndex
             passCardActor?.setScale(cardScaleTable)
@@ -977,7 +980,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 closeDiscard(); return true
             }
             override fun keyDown(keycode: Int): Boolean {
-                if (keycode == com.badlogic.gdx.Input.Keys.BACK || keycode == com.badlogic.gdx.Input.Keys.ESCAPE) closeDiscard()
+                // render() handles Back once; closing here too would also navigate to the lobby.
                 return true
             }
         }

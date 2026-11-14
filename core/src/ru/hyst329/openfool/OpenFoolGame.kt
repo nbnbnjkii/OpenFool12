@@ -105,8 +105,11 @@ class OpenFoolGame(val orientationHelper: OrientationHelper) : Game() {
     internal fun ensureGameAssets() { ensureDeck(preferences.getString(SettingsScreen.DECK,"rus")) }
 
     override fun dispose() {
+        screen?.dispose()
+        assetManager.dispose()
         batch.dispose()
         font.dispose()
+        smallFont.dispose()
         VisUI.dispose()
     }
 }

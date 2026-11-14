@@ -93,7 +93,7 @@ internal class NeonTheme : Disposable {
         }
         batch.color=Color.WHITE
         font(13).color=Color.WHITE
-        font(13).draw(batch,"${kotlin.math.ceil(seconds).toInt()}",cx+radius-4f,cy+radius+15f,30f,Align.center,false)
+        font(13).draw(batch,"${kotlin.math.ceil(seconds).toInt()}",cx-15f,cy+radius+15f,30f,Align.center,false)
     }
     override fun dispose() { textures.values.forEach { it.dispose() }; fonts.values.forEach { it.dispose() } }
 }
