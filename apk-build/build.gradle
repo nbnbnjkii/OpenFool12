@@ -1,0 +1,61 @@
+// Standalone Android build; leaves the historical desktop/iOS Gradle build intact.
+plugins {
+    id 'com.android.application' version '8.5.2'
+    id 'org.jetbrains.kotlin.android' version '1.9.24'
+}
+
+configurations { natives }
+
+android {
+    namespace 'ru.hyst329.openfool'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'ru.hyst329.openfool'
+        minSdk 21
+        targetSdk 35
+        versionCode 31
+        versionName '0.4.0-neon'
+    }
+    sourceSets.main {
+        manifest.srcFile '../android/AndroidManifest.xml'
+        java.srcDirs = ['../android/src', '../core/src']
+        res.srcDirs = ['../android/res']
+        assets.srcDirs = ['../android/assets']
+        jniLibs.srcDirs = [layout.buildDirectory.dir('natives')]
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions { jvmTarget = '1.8' }
+    packaging.resources.excludes += ['META-INF/robovm/ios/robovm.xml', 'META-INF/INDEX.LIST']
+}
+
+dependencies {
+    implementation 'com.badlogicgames.gdx:gdx:1.9.10'
+    implementation 'com.badlogicgames.gdx:gdx-backend-android:1.9.10'
+    implementation 'com.badlogicgames.gdx:gdx-freetype:1.9.10'
+    implementation 'com.kotcrab.vis:vis-ui:1.4.3'
+    implementation 'io.github.microutils:kotlin-logging:1.7.4'
+    implementation 'org.slf4j:slf4j-android:1.7.36'
+    ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'].each { abi ->
+        natives "com.badlogicgames.gdx:gdx-platform:1.9.10:natives-${abi}"
+        natives "com.badlogicgames.gdx:gdx-freetype-platform:1.9.10:natives-${abi}"
+    }
+}
+
+tasks.register('extractNatives') {
+    inputs.files(configurations.natives)
+    outputs.dir(layout.buildDirectory.dir('natives'))
+    doLast {
+        configurations.natives.files.each { jar ->
+            def abi = ['armeabi-v7a','arm64-v8a','x86_64','x86'].find { jar.name.endsWith("natives-${it}.jar") }
+            copy {
+                from zipTree(jar)
+                include '*.so'
+                into layout.buildDirectory.dir("natives/${abi}")
+            }
+        }
+    }
+}
+tasks.named('preBuild').configure { dependsOn 'extractNatives' }

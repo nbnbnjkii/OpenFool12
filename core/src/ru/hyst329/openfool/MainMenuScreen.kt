@@ -3,159 +3,74 @@ package ru.hyst329.openfool
 import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input
 import com.badlogic.gdx.Screen
+import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
-import com.badlogic.gdx.graphics.Texture
-import com.badlogic.gdx.graphics.g2d.Sprite
-import com.badlogic.gdx.scenes.scene2d.InputEvent
 import com.badlogic.gdx.scenes.scene2d.Stage
-import com.badlogic.gdx.scenes.scene2d.utils.ClickListener
+import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.utils.viewport.FitViewport
-import com.kotcrab.vis.ui.widget.VisProgressBar
-import com.kotcrab.vis.ui.widget.VisTextButton
 
-
-/**
- * Created by hyst329 on 13.03.2017.
- * Licensed under MIT License.
- */
-
+/** Portrait lobby. Unimplemented network features are explicitly labelled, never simulated. */
 internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
-    private val stage: Stage = Stage(FitViewport(800f, 480f))
-    private var logo: Sprite = Sprite(Texture(Gdx.files.internal("logos/mm_logo.png")))
-    private var hammerAndSickle: Sprite = Sprite(Texture(Gdx.files.internal("holidays/hammersickle.png")))
-    private var santaHat: Sprite = Sprite(Texture(Gdx.files.internal("holidays/santahat.png")))
-    private var canStart: Boolean = false
-    private val newGameButton: VisTextButton
-    private val settingsButton: VisTextButton
-    private val quitButton: VisTextButton
-    private val progressBar: VisProgressBar
-
+    private val stage = Stage(FitViewport(480f, 1000f))
+    private val theme = NeonTheme()
+    private val status: Label
+    private var ready = false
+    private var message = ""
     init {
-        // Initialise the stage
         Gdx.input.inputProcessor = stage
-        game.orientationHelper.requestOrientation(OrientationHelper.Orientation.LANDSCAPE)
-
-        newGameButton = VisTextButton(game.localeBundle.get("NewGame"))
-        newGameButton.setBounds(40f, 300f, 250f, 80f)
-        newGameButton.addListener(object : ClickListener() {
-            override fun clicked(event: InputEvent?, x: Float, y: Float) {
-                // super.clicked(event, x, y);
-                if (canStart)
-                    newGame()
-            }
-        })
-        stage.addActor(newGameButton)
-        settingsButton = VisTextButton(game.localeBundle.get("Settings"))
-        settingsButton.setBounds(40f, 200f, 250f, 80f)
-        settingsButton.addListener(object : ClickListener() {
-            override fun clicked(event: InputEvent?, x: Float, y: Float) {
-                // super.clicked(event, x, y);
-                showSettings()
-            }
-        })
-        stage.addActor(settingsButton)
-        quitButton = VisTextButton(game.localeBundle.get("Quit"))
-        quitButton.setBounds(40f, 100f, 250f, 80f)
-        quitButton.addListener(object : ClickListener() {
-            override fun clicked(event: InputEvent?, x: Float, y: Float) {
-                // super.clicked(event, x, y);
-                quit()
-            }
-        })
-        stage.addActor(quitButton)
-        progressBar = VisProgressBar(0f, 1f, 1e-3f, false)
-        progressBar.setBounds(40f, 40f, 720f, 60f)
-        progressBar.setAnimateDuration(0.2f)
-        stage.addActor(progressBar)
+        game.orientationHelper.requestOrientation(OrientationHelper.Orientation.PORTRAIT)
+        theme.image(stage,"lobby",0f,0f,480f,1000f)
+        theme.image(stage,"avatar",20f,892f,78f,78f)
+        theme.label(stage,"Игрок_1",110f,925f,180f,40f,27)
+        theme.label(stage,"Уровень 1  •  OpenFool",107f,892f,244f,28f,16,Color.valueOf("a9b2d0"))
+        theme.button(stage,"...","slate",420f,914f,42f,42f,24) { settings() }
+        theme.image(stage,"banner",20f,677f,440f,186f)
+        status = theme.label(stage,"Загрузка карт...",20f,628f,440f,32f,17,Color.valueOf("9fa9c4"))
+        theme.button(stage,"ИГРАТЬ ОНЛАЙН","green",20f,495f,440f,102f,29) {
+            message = "Онлайн-режим пока в разработке"
+        }
+        theme.button(stage,"ИГРАТЬ С ДРУЗЬЯМИ","purple",20f,374f,440f,96f,24) {
+            message = "Игра по сети пока недоступна"
+        }
+        theme.button(stage,"ПРОТИВ БОТА","blue",20f,252f,440f,96f,29) { if (ready) choosePlayers() }
+        theme.button(stage,"ТУРНИРЫ  •  СКОРО","slate",20f,132f,440f,94f,25) {
+            message = "Турниры появятся в следующих версиях"
+        }
+        theme.label(stage,"ГЛАВНАЯ",14f,25f,130f,40f,19,Color.valueOf("49e38a"))
+        theme.button(stage,"ПРАВИЛА","slate",166f,25f,144f,44f,17) {
+            message = "Выберите карту для хода. Бейте старшей мастью или козырем."
+        }
+        theme.button(stage,"НАСТРОЙКИ","slate",323f,25f,143f,44f,16) { settings() }
     }
-
-    override fun show() {
-
+    private fun settings() { game.screen = SettingsScreen(game); dispose() }
+    private fun choosePlayers() {
+        theme.image(stage,"lobby",12f,235f,456f,390f)
+        theme.label(stage,"ИГРА С БОТАМИ",30f,552f,420f,48f,28)
+        theme.label(stage,"Количество игроков",30f,500f,420f,34f,21)
+        for (count in 2..4) {
+            theme.button(stage,"$count","purple",36f+(count-2)*140f,397f,128f,78f,30) {
+                game.preferences.putBoolean(SettingsScreen.ORIENTATION,true).flush()
+                RuleSet(game.preferences).apply { playerCount=count; teamPlay=false; cardCount=36 }.save(game.preferences)
+                game.screen = GameScreen(game); dispose()
+            }
+        }
+        theme.button(stage,"ОТМЕНА","slate",60f,282f,360f,72f,22) {
+            game.screen = MainMenuScreen(game); dispose()
+        }
     }
-
     override fun render(delta: Float) {
-        when (getCurrentHoliday()) {
-            Holiday.OCTOBER_REVOLUTION -> Gdx.gl.glClearColor(0.8f, 0.0f, 0.0f, 1f)
-            Holiday.NEW_YEAR ->  Gdx.gl.glClearColor(0.0f, 0.6f, 0.9f, 1f)
-            null -> Gdx.gl.glClearColor(0.2f, 0.8f, 0.3f, 1f)
-        }
-
-        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
-        stage.act(delta)
-        stage.draw()
-        game.batch.transformMatrix = stage.viewport.camera.view
-        game.batch.projectionMatrix = stage.viewport.camera.projection
-        game.batch.begin()
-        if (game.assetManager.update()) {
-            canStart = true
-            logo.setCenter(stage.viewport.worldWidth * 560f / 840f, stage.viewport.worldHeight * 250f / 480f)
-            logo.draw(game.batch)
-            when (getCurrentHoliday()) {
-                Holiday.OCTOBER_REVOLUTION -> {
-                    hammerAndSickle.setCenter(stage.viewport.worldWidth * 165f / 840f, stage.viewport.worldHeight * 430f / 480f)
-                    hammerAndSickle.setScale(0.35f)
-                    hammerAndSickle.draw(game.batch)
-                }
-                Holiday.NEW_YEAR -> {
-                    santaHat.setCenter(stage.viewport.worldWidth * 165f / 840f, stage.viewport.worldHeight * 430f / 480f)
-                    santaHat.setScale(0.3f)
-                    santaHat.draw(game.batch)
-                }
-                null -> {
-
-                }
-            }
-
-        } else {
-            val progress = game.assetManager.progress
-            game.font.draw(game.batch, game.localeBundle.format("LoadingAssets",
-                    Math.round(progress * 100)), stage.viewport.worldWidth / 2.8f, stage.viewport.worldHeight / 4.4f)
-            progressBar.value = progress
-        }
-        game.batch.end()
-        newGameButton.isVisible = canStart
-        settingsButton.isVisible = canStart
-        quitButton.isVisible = canStart
-        progressBar.isVisible = !canStart
-        if (Gdx.input.isKeyJustPressed(Input.Keys.BACK) || Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
-            Gdx.app.exit()
-        }
-
+        ready = game.assetManager.update()
+        status.setText(if (!ready) "Загрузка карт: ${(game.assetManager.progress*100).toInt()}%" else
+            if (message.isEmpty()) "Офлайн  •  Игра с ботами доступна" else message)
+        status.setFontScale(if (message.length > 48) 0.7f else 1f)
+        Gdx.gl.glClearColor(0.07f,0.08f,0.17f,1f); Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
+        stage.act(delta); stage.draw()
+        if (Gdx.input.isKeyJustPressed(Input.Keys.BACK) || Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) Gdx.app.exit()
     }
-
-    override fun resize(width: Int, height: Int) {
-        stage.viewport.update(width, height, true)
-        stage.viewport.camera.update()
-    }
-
-    override fun pause() {
-
-    }
-
-    override fun resume() {
-
-    }
-
-    override fun hide() {
-
-    }
-
-    override fun dispose() {
-
-    }
-
-    private fun newGame() {
-        game.screen = NewGameScreen(game)
-        dispose()
-    }
-
-    private fun showSettings() {
-        game.screen = SettingsScreen(game)
-        dispose()
-    }
-
-    private fun quit() {
-        dispose()
-        Gdx.app.exit()
-    }
+    override fun resize(width: Int,height: Int) { stage.viewport.update(width,height,true) }
+    override fun dispose() { stage.dispose(); theme.dispose() }
+    override fun show() {}
+    override fun hide() {}
+    override fun pause() {}
+    override fun resume() {}
 }
