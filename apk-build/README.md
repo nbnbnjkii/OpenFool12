@@ -176,3 +176,27 @@ so the next stake is checked against the newly settled balance.
 Tests cover all scale ticks, monotonically clamped drag input, low/zero balances,
 reservation limits, duplicate starts, 2–6-player settlements, and exactly-once
 refund/recovery. These remain debug/local balances, not real-money gambling.
+
+## Readiness, status and surrender (0.9.0)
+
+Only Готов is available as a play action on entering the table. Local bots
+confirm readiness automatically, with a ready status beside each avatar. Once
+all seats are ready, “Все готовы” precedes a staggered animated deal. Timers,
+paid tools and gameplay stay locked until the last dealt card has arrived.
+
+“Ваш ход” is rendered only in the otherwise-empty action slot, never alongside
+Беру/Бито/Отдать, after taking/done, during animation, dragging, readiness or
+spectating. Taking bots have “Беру” beside their avatar, not in the human slot.
+
+The white flag and Android Back/back gesture open a blocking yes/no surrender
+dialog. No charge on No; Yes finalizes the already-reserved stake as a loss
+exactly once and keeps the user at the table as a spectator. AI takes over the
+human hand until the round/match ends; the final result remains a loss even if
+the AI hand exits first. A subsequent confirmed exit while spectating cannot
+charge another stake. Modal time does not consume decision deadlines.
+
+Android Home/recents gestures cannot be vetoed by an ordinary app. Suspending
+pauses local play; returning to an unsettled table opens the same confirmation,
+without automatically forfeiting money. Force-killing before confirmation still
+uses the existing interrupted-game escrow recovery; no claim is made to block
+system navigation or implement a persistent online match.

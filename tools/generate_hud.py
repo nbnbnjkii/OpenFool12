@@ -32,3 +32,9 @@ for name in ('coin','crystal','mode_pass','mode_throw'):
   d.rounded_rectangle((39,25,100,109),9,fill=(35,49,78),outline=(160,194,218),width=5)
   for y in (49,81): d.ellipse((62,y-6,74,y+6),fill=(184,216,238))
  im.save(out/(name+'.png'))
+# Icon-only surrender control.
+im=Image.new('RGBA',(180,180));d=ImageDraw.Draw(im)
+d.line((47,27,47,157),fill='white',width=10)
+d.polygon([(52,30),(92,21),(143,35),(143,103),(94,88),(52,98)],fill='white')
+d.ellipse((26,151,71,163),fill=(188,204,220))
+im.save(out/'white_flag.png')

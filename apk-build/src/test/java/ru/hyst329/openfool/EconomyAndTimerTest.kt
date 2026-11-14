@@ -112,4 +112,23 @@ class EconomyAndTimerTest {
         assertEquals(0,wallet.coins)
     }
 
+    @Test fun confirmedSurrenderLosesOneStakeAndLaterAiWinCannotPayOut() {
+        val wallet=GameEconomy(preferences());val flow=TableFlow(2)
+        assertTrue(wallet.reserveStake(250,2))
+        if (flow.surrender()) wallet.settleStake(-1)
+        if (flow.surrender()) wallet.settleStake(-1)
+        assertEquals(9750,wallet.coins)
+        assertEquals(0,wallet.settleStake(1))
+        assertEquals(0,wallet.refundStake())
+        assertEquals(9750,wallet.coins)
+    }
+    @Test fun rejectingSurrenderDoesNotConsumeReservation() {
+        val wallet=GameEconomy(preferences());val flow=TableFlow(2)
+        wallet.reserveStake(250,2)
+        assertFalse(flow.surrendered)
+        assertEquals(250,wallet.activeStake)
+        assertEquals(9750,wallet.coins)
+        assertEquals(250,wallet.refundStake())
+    }
+
 }

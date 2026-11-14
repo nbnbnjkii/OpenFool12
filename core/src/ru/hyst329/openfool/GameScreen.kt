@@ -51,6 +51,12 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
     private val stakeReserved = game.economy.reserveStake(stake,RuleSet(game.preferences).playerCount)
         .also { require(it) { "Stake exceeds wallet balance or another wager is active" } }
     private var wagerReleased = false
+    private var confirmSurrender = false
+    private var warnAfterResume = false
+    private var initialDealStarted = false
+    private var readyButton: com.badlogic.gdx.scenes.scene2d.Actor? = null
+    private var discardButton: com.badlogic.gdx.scenes.scene2d.Actor? = null
+    private var hintButton: com.badlogic.gdx.scenes.scene2d.Actor? = null
     private val neon = NeonTheme()
     private val perks = GamePerks(game.economy)
     private val clock = DecisionTimer()
@@ -126,6 +132,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
     private val cardActors = HashMap<Card, CardActor>()
     internal var ruleSet = RuleSet(game.preferences)
         private set
+    private val flow = TableFlow(ruleSet.playerCount)
     private val deck = Deck(ruleSet.lowestRank)
     private val screenOrientationIsPortrait: Boolean = game.preferences.getBoolean(SettingsScreen.ORIENTATION, true)
     private val cardScalePlayer = if (screenOrientationIsPortrait) CARD_SCALE_PLAYER_PORTRAIT else CARD_SCALE_PLAYER_LANDSCAPE
@@ -272,51 +279,13 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         trump?.moveBy(90 * cardScaleTable, 0f)
         trumpSuit = trumpCard!!.suit
         logger.debug("Trump suit is $trumpSuit")
-        // Draw cards
-        for (i in 0 until ruleSet.playerCount) {
-            drawCardsToPlayer(i, DEAL_LIMIT)
-        }
-        // TODO: Check for redeal
-        // Determine the first attacker and thrower
-        var lowestTrump = Rank.ACE
-        var lowestTrumpCard = Card(Suit.SPADES, Rank.ACE)
-        var firstAttacker = 0
-        for (p in players) {
-            for (c in p.hand) {
-                if (c.suit === trumpSuit && (c.rank !== Rank.ACE && c.rank.value < lowestTrump.value || lowestTrump === Rank.ACE)) {
-                    firstAttacker = p.index
-                    lowestTrump = c.rank
-                    lowestTrumpCard = c
-                }
-            }
-        }
-
-        if (firstAttacker != 0) {
-            val showingTrump = cardActors[lowestTrumpCard]
-            val z = showingTrump?.zIndex ?: 0
-            showingTrump?.addAction(Actions.sequence(object : Action() {
-                override fun act(delta: Float): Boolean {
-                    showingTrump.isFaceUp = true
-                    showingTrump.zIndex = 100
-                    return true
-                }
-            }, Actions.delay(1.5f), object : Action() {
-                override fun act(delta: Float): Boolean {
-                    showingTrump.isFaceUp = false
-                    showingTrump.zIndex = z
-                    return true
-                }
-            }))
-        }
-        logger.debug(players[firstAttacker].name +
-                " (${players[firstAttacker].index})" +
-                " has the lowest trump $lowestTrump")
-        currentAttackerIndex = firstAttacker
-        currentThrowerIndex = firstAttacker
         stage.addActor(dragLayer)
         if (screenOrientationIsPortrait) {
             // Opaque panel masks the lower half of the fan and blocks touches on hidden cards.
             neon.image(stage,"hud_panel",0f,0f,480f,HandFan.PANEL_TOP).touchable = Touchable.enabled
+            readyButton = neon.button(stage,"ГОТОВ","green",12f,28f,177f,62f,26) {
+                flow.humanReady(); updateActionButtons()
+            }
             doneButton = neon.button(stage,"БИТО","green",12f,28f,177f,62f,26) {
                 if (humanActions().done) {
                     currentThrower.sayDone()
@@ -337,18 +306,16 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
                 updateActionButtons()
             }
             undoButton = neon.iconButton(stage,"perk_undo",309f,40f,44f) { undoLastCard() }
-            neon.iconButton(stage,"perk_discard",367f,40f,44f) {
+            discardButton = neon.iconButton(stage,"perk_discard",367f,40f,44f) {
                 if (perks.unlockDiscard()) openDiscard() else toast("Недостаточно кристаллов: просмотр стоит 3")
             }
-            neon.iconButton(stage,"perk_hint",425f,40f,44f) {
+            hintButton = neon.iconButton(stage,"perk_hint",425f,40f,44f) {
                 val already = perks.highlightEnabled
                 if (perks.unlockHighlight()) toast(if (already) "Подсветка уже активна на эту партию" else "Подсветка на партию включена: -1 кристалл")
                 else toast("Недостаточно кристаллов: подсветка стоит 1")
             }
             updateActionButtons()
-            neon.button(stage,"МЕНЮ","slate",15f,932f,65f,45f,13) {
-                leaveToMenu()
-            }
+            neon.iconButton(stage,"white_flag",22f,937f,38f) { askSurrender() }
         }
     }
 
@@ -360,10 +327,24 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         if (Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.BACK) ||
             Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.ESCAPE)) {
             if (discardModal) { closeDiscard(); return }
-            leaveToMenu(); return
+            if (confirmSurrender) cancelSurrender() else askSurrender()
+            return
         }
-        val step = if (skipClockFrame) 0f else delta.coerceAtLeast(0f)
+        if (warnAfterResume) { warnAfterResume=false;askSurrender() }
+        val step = if (skipClockFrame || confirmSurrender) 0f else delta.coerceAtLeast(0f)
         skipClockFrame = false
+        if (!confirmSurrender) {
+            flow.tick(step)
+            if (flow.phase==TableFlow.Phase.DEALING && !initialDealStarted) {
+                initialDealStarted=true
+                startInitialDeal()
+            }
+            if (flow.phase==TableFlow.Phase.DEALING && initialDealStarted &&
+                cardActors.values.all { it.actions.size==0 }) {
+                flow.dealt();gameState=READY;sortPlayerCards();decisionSerial++
+                toast(if (flow.surrendered) "Наблюдение за партией" else "Играем!")
+            }
+        }
         messageSeconds = (messageSeconds-step).coerceAtLeast(0f)
         undoWindow = (undoWindow-step).coerceAtLeast(0f)
         if (undoWindow == 0f) lastUndo = null
@@ -388,11 +369,11 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             oldGameState = gameState
         }
         // Three seconds after a human card are reserved for paid undo. No bot can reveal a reply meanwhile.
-        if (undoWindow <= 0f) when (gameState) {
+        if (flow.playing && !confirmSurrender && undoWindow <= 0f) when (gameState) {
             READY -> {
                 throwLimit = min(if (ruleSet.loweredFirstDiscardLimit && discardPile.isEmpty()) 5 else DEAL_LIMIT,
                     currentDefender.hand.size)
-                if (currentAttacker.index != 0)
+                if (currentAttacker.index != 0 || flow.surrendered)
                     currentAttacker.startTurn(trumpSuit, cardsRemaining(), players.map { it.hand.size }.toTypedArray())
             }
             DRAWING -> {
@@ -400,7 +381,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             THROWING -> {
             }
             THROWN -> {
-                if (currentDefender.index != 0) {
+                if (currentDefender.index != 0 || flow.surrendered) {
                     if (!isPlayerTaking) {
                         currentDefender.tryBeat(attackCards, defenseCards, trumpSuit, cardsRemaining(),
                             players.map { it.hand.size }.toTypedArray(), nextDefender.hand.size)
@@ -416,10 +397,10 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             BEATEN -> {
                 val limitReached = currentDefender.hand.size == 0 ||
                     attackCards.count { it != null } >= throwLimit
-                val waitingForHuman = currentThrower.index == 0 && currentDefender.index != 0 && !playerDoneStatuses[0]
+                val waitingForHuman = !flow.surrendered && currentThrower.index == 0 && currentDefender.index != 0 && !playerDoneStatuses[0]
                 if (limitReached && !waitingForHuman) {
                     gameState = FINISHED
-                } else if (currentThrower.index != 0) {
+                } else if (currentThrower.index != 0 || flow.surrendered) {
                     if (limitReached || TurnControls.botFinishesDefendedHumanTurn(
                             currentDefender.index == 0, attackCards.count { it != null }, defenseCards.count { it != null })) {
                         currentThrower.sayDone()
@@ -461,7 +442,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         game.batch.color = Color(Color.WHITE)
         game.batch.end()
         // Draw stage
-        stage.act(delta)
+        if (!confirmSurrender) stage.act(delta)
         layoutHumanHand()
         updateHandHints()
         updateActionButtons()
@@ -481,14 +462,26 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
                 val f = neon.font(if (i == 0) 14 else 17)
                 f.color = if (currentDefender.index == i || currentThrower.index == i) Color.valueOf("6bffce") else Color.WHITE
                 f.draw(game.batch,players[i].name,x-12f,if (i == 0) 18f else y-3f,90f,com.badlogic.gdx.utils.Align.center,false)
-                if (i > 0) f.draw(game.batch,"${players[i].hand.size} карт",x-12f,y-25f,90f,com.badlogic.gdx.utils.Align.center,false)
+                if (i > 0) {
+                    val status=when {
+                        flow.phase==TableFlow.Phase.WAITING || flow.phase==TableFlow.Phase.ANNOUNCING -> if (flow.ready[i]) "Готов" else "Ожидание"
+                        else -> "${players[i].hand.size} карт"
+                    }
+                    f.draw(game.batch,status,x-12f,y-25f,90f,com.badlogic.gdx.utils.Align.center,false)
+                    if (isPlayerTaking && currentDefender.index==i) {
+                        f.color=Color.valueOf("ffce73")
+                        f.draw(game.batch,"Беру",if (x>300f) x-100f else x+76f,y+37f,95f,com.badlogic.gdx.utils.Align.center,false)
+                    }
+                }
             }
             drawGameHud()
             if (messageSeconds > 0f) neon.font(14).draw(game.batch,message,15f,276f,450f,com.badlogic.gdx.utils.Align.center,true)
             else if (undoWindow > 0f) neon.font(14).draw(game.batch,"Возврат карты: 2 кристалла (${kotlin.math.ceil(undoWindow).toInt()} с)",15f,276f,450f,com.badlogic.gdx.utils.Align.center,false)
             neon.font(20).draw(game.batch,"${cardsRemaining()}",388f,778f)
-            val hint = if (isPlayerTaking) "${currentDefender.name} берёт" else if (currentDefender.index == 0) if (ruleSet.allowPass) "Тяните на стол — отбой или перевод" else "Тяните на стол — карта сама найдёт цель" else if (currentThrower.index == 0) "Перетащите карту на стол" else "Ход соперника"
-            if (decisionOwner() != 0) neon.font(15).draw(game.batch,hint,0f,340f,480f,com.badlogic.gdx.utils.Align.center,false)
+            if (flow.phase==TableFlow.Phase.ANNOUNCING || flow.phase==TableFlow.Phase.DEALING) {
+                neon.font(26).color=Color.WHITE
+                neon.font(26).draw(game.batch,if (flow.phase==TableFlow.Phase.ANNOUNCING) "Все готовы!" else "Раздача карт...",0f,480f,480f,com.badlogic.gdx.utils.Align.center,false)
+            }
         } else {
         for (i in 0 until ruleSet.playerCount) {
             val position = (if (i == 0) playerPosition else aiPosition).clone()
@@ -527,6 +520,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         }
         }
         if (discardModal) drawDiscardModal()
+        if (confirmSurrender) drawSurrenderDialog()
         game.batch.end()
         // Check if the game is over
         if (isGameOver) {
@@ -539,6 +533,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             var position = players.size
             val playersPlaces: Map<Int, String> = players.map { (if (places[it.index] == 0) position-- else places[it.index]) to it.name }.toMap()
 
+            if (flow.surrendered) gameResult=LOST
             game.economy.settleStake(when (gameResult) {
                 WON, TEAM_WON -> 1
                 DRAW, TEAM_DRAW -> 0
@@ -557,6 +552,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
 
     override fun pause() {
         skipClockFrame = true
+        if (!flow.surrendered && !wagerReleased) warnAfterResume=true
         stage.cancelTouchFocus()
     }
 
@@ -616,7 +612,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
                 val index = player.hand.size - 1
                 val posX = position[0] + index * delta[0]
                 val posY = position[1] + index * delta[1]
-                cardActor?.addAction(Actions.moveTo(posX, posY, 0.4f))
+                cardActor?.addAction(Actions.moveTo(posX,posY,0.4f))
                 cardActor?.rotation = 0.0f
                 cardActor?.setScale(if (playerIndex == 0) cardScalePlayer else cardScaleAI)
                 playerGroups[playerIndex].addActor(cardActor)
@@ -843,7 +839,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
 
     private fun drawCardsToPlayer(playerIndex: Int, cardCount: Int) {
         val player = players[playerIndex]
-        if (!deck.cards!!.isEmpty()) {
+        if (!deck.cards!!.isEmpty() && flow.phase!=TableFlow.Phase.DEALING) {
             player.addAction(Actions.sequence(
                     GameStateChangedAction(GameState.DRAWING),
                     Actions.delay(0.39f),
@@ -863,7 +859,12 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             val index = player.hand.size - 1
             val posX = position[0] + index * delta[0]
             val posY = position[1] + index * delta[1]
-            cardActor?.addAction(Actions.moveTo(posX, posY, 0.4f))
+            if (flow.phase==TableFlow.Phase.DEALING) {
+                cardActor?.isVisible=false
+                cardActor?.addAction(Actions.sequence(
+                    Actions.delay((i*ruleSet.playerCount+playerIndex)*0.055f),
+                    Actions.visible(true),Actions.moveTo(posX,posY,0.35f)))
+            } else cardActor?.addAction(Actions.moveTo(posX, posY, 0.4f))
             cardActor?.rotation = 0.0f
             cardActor?.setScale(if (playerIndex == 0) cardScalePlayer else cardScaleAI)
             playerGroups[playerIndex].addActor(cardActor)
@@ -918,6 +919,93 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             return players[currentThrowerIndex]
         }
 
+    private fun askSurrender() {
+        if (confirmSurrender) return
+        closeDiscard()
+        stage.cancelTouchFocus()
+        confirmSurrender=true
+        Gdx.input.inputProcessor=object : com.badlogic.gdx.InputAdapter() {
+            override fun touchDown(x: Int,y: Int,pointer: Int,button: Int): Boolean {
+                val p=stage.viewport.unproject(com.badlogic.gdx.math.Vector2(x.toFloat(),y.toFloat()))
+                val cy=stage.viewport.worldHeight/2f
+                val center=stage.viewport.worldWidth/2f
+                if (p.y in cy-80f..cy-26f) {
+                    if (p.x in center-185f..center-20f) acceptSurrender()
+                    else if (p.x in center+20f..center+185f) cancelSurrender()
+                }
+                return true
+            }
+            override fun keyDown(keycode: Int): Boolean = true // Back is handled once in render().
+        }
+        updateActionButtons()
+    }
+
+    private fun cancelSurrender() {
+        confirmSurrender=false
+        Gdx.input.inputProcessor=stage
+        skipClockFrame=true
+        updateActionButtons()
+    }
+
+    private fun acceptSurrender() {
+        if (flow.surrendered) { cancelSurrender();leaveToMenu();return }
+        if (flow.surrender()) {
+            // Stake was reserved on entry: finalize its loss, never subtract it a second time.
+            game.economy.settleStake(-1)
+            wagerReleased=true
+            lastUndo=null;undoWindow=0f
+            decisionSerial++
+            toast("Вы сдались. Ставка ${WagerPolicy.label(stake)} проиграна")
+        }
+        cancelSurrender()
+    }
+
+    private fun drawSurrenderDialog() {
+        val batch=game.batch
+        val w=stage.viewport.worldWidth; val cy=stage.viewport.worldHeight/2f
+        batch.color=Color(0f,0f,0f,0.82f)
+        batch.draw(neon.texture("pixel"),0f,0f,w,stage.viewport.worldHeight)
+        batch.color=Color.valueOf("202e4b")
+        batch.draw(neon.texture("slate"),w/2-215f,cy-120f,430f,235f)
+        batch.color=Color.WHITE
+        neon.font(23).color=Color.WHITE
+        neon.font(23).draw(batch,if (flow.surrendered) "Покинуть стол?" else "Вы действительно хотите сдаться?",w/2-195f,cy+78f,390f,com.badlogic.gdx.utils.Align.center,true)
+        neon.font(16).color=Color.valueOf("ffd28b")
+        neon.font(16).draw(batch,if (flow.surrendered) "Ставка уже проиграна. Дополнительных списаний нет." else "Будет проиграна ставка: ${WagerPolicy.label(stake)}",w/2-190f,cy+3f,380f,com.badlogic.gdx.utils.Align.center,true)
+        batch.draw(neon.texture("gold"),w/2-185f,cy-80f,165f,54f)
+        batch.draw(neon.texture("blue"),w/2+20f,cy-80f,165f,54f)
+        neon.font(23).color=Color.WHITE
+        neon.font(23).draw(batch,"ДА",w/2-185f,cy-42f,165f,com.badlogic.gdx.utils.Align.center,false)
+        neon.font(23).draw(batch,"НЕТ",w/2+20f,cy-42f,165f,com.badlogic.gdx.utils.Align.center,false)
+    }
+
+    private fun startInitialDeal() {
+        // Animated deal starts only after every seat is ready
+        for (i in 0 until ruleSet.playerCount) {
+            drawCardsToPlayer(i, DEAL_LIMIT)
+        }
+        // TODO: Check for redeal
+        // Determine the first attacker and thrower
+        var lowestTrump = Rank.ACE
+        var lowestTrumpCard = Card(Suit.SPADES, Rank.ACE)
+        var firstAttacker = 0
+        for (p in players) {
+            for (c in p.hand) {
+                if (c.suit === trumpSuit && (c.rank !== Rank.ACE && c.rank.value < lowestTrump.value || lowestTrump === Rank.ACE)) {
+                    firstAttacker = p.index
+                    lowestTrump = c.rank
+                    lowestTrumpCard = c
+                }
+            }
+        }
+
+        logger.debug(players[firstAttacker].name +
+                " (${players[firstAttacker].index})" +
+                " has the lowest trump $lowestTrump")
+        currentAttackerIndex = firstAttacker
+        currentThrowerIndex = firstAttacker
+    }
+
     private fun releaseWager() {
         if (stakeReserved && !wagerReleased) { game.economy.refundStake(); wagerReleased=true }
     }
@@ -940,17 +1028,24 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
 
         val actions = humanActions()
         val hasAction = actions.take || actions.done || actions.give
-        val humanTurn = decisionOwner() == 0
-        if (!hasAction) {
+        val humanTurn = TurnControls.showYourTurn(actions,decisionOwner()==0,
+            flow.playing && !flow.surrendered && !confirmSurrender && draggedCard==null,
+            isPlayerTaking && currentDefender.index==0,playerDoneStatuses[0])
+        if (!hasAction && readyButton?.isVisible!=true) {
             val f = neon.font(if (humanTurn) 25 else 18)
             f.color = if (humanTurn) Color.valueOf("73f0c1") else Color.valueOf("aebbd3")
-            f.draw(batch,if (humanTurn) "Ваш ход" else "Ход соперника",12f,69f,177f,com.badlogic.gdx.utils.Align.center,false)
-        } else if (humanTurn) {
-            neon.font(21).color = Color.valueOf("73f0c1")
-            neon.font(21).draw(batch,"Ваш ход",0f,247f,480f,com.badlogic.gdx.utils.Align.center,false)
+            val text=when {
+                flow.surrendered -> "Наблюдение"
+                flow.phase==TableFlow.Phase.WAITING -> "Ждём игроков"
+                flow.phase==TableFlow.Phase.ANNOUNCING -> "Все готовы"
+                flow.phase==TableFlow.Phase.DEALING -> "Раздача карт"
+                humanTurn -> "Ваш ход"
+                else -> "Ожидание"
+            }
+            f.draw(batch,text,12f,69f,177f,com.badlogic.gdx.utils.Align.center,false)
         }
         val prices = listOf(2,if (perks.discardVisible) 0 else 3,if (perks.highlightEnabled) 0 else 1)
-        for ((index,cost) in prices.withIndex()) {
+        if (flow.playing && !flow.surrendered) for ((index,cost) in prices.withIndex()) {
             val x = 309f+58f*index
             neon.font(15).color = Color.valueOf("d6e6ff")
             neon.font(15).draw(batch,"$cost",x,105f,25f,com.badlogic.gdx.utils.Align.center,false)
@@ -965,7 +1060,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
 
     private fun toast(text: String) { message = text; messageSeconds = 4f }
 
-    private fun decisionOwner(): Int = when (gameState) {
+    private fun decisionOwner(): Int = if (!flow.playing || confirmSurrender) -1 else when (gameState) {
         READY -> currentAttacker.index
         THROWN -> if (isPlayerTaking) currentThrower.index else currentDefender.index
         BEATEN -> currentThrower.index
@@ -1075,7 +1170,8 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         }
     }
 
-    private fun humanActions(): TurnControls.Actions = TurnControls.actions(
+    private fun humanActions(): TurnControls.Actions = if (!flow.playing || flow.surrendered || confirmSurrender)
+        TurnControls.Actions() else TurnControls.actions(
         settled = gameState == READY || gameState == THROWN || gameState == BEATEN,
         dragging = draggedCard != null,
         attacks = attackCards.count { it != null }, defenses = defenseCards.count { it != null },
@@ -1089,12 +1185,16 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             actor?.isVisible = visible
             actor?.touchable = if (visible) Touchable.enabled else Touchable.disabled
         }
+        show(readyButton,flow.phase==TableFlow.Phase.WAITING && !flow.ready[0] && !confirmSurrender)
+        val tools=flow.playing && !flow.surrendered && !confirmSurrender
+        show(undoButton,tools);show(discardButton,tools);show(hintButton,tools)
         show(takeButton,actions.take)
         show(doneButton,actions.done)
         show(giveButton,actions.give)
     }
 
     private fun canDrag(actor: CardActor): Boolean =
+        flow.playing && !flow.surrendered && !confirmSurrender &&
         (gameState == READY || gameState == THROWN || gameState == BEATEN) &&
         players[0].hand.contains(actor.card) &&
         ((currentThrower.index == 0 && !playerDoneStatuses[0] &&

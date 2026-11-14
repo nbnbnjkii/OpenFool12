@@ -14,6 +14,9 @@ internal object TurnControls {
             give = throwing && taking
         )
     }
+    fun showYourTurn(actions: Actions,humanOwner: Boolean,interactive: Boolean,taking: Boolean,alreadyDone: Boolean): Boolean =
+        interactive && humanOwner && !taking && !alreadyDone && !actions.take && !actions.done && !actions.give
+
     fun botFinishesDefendedHumanTurn(humanDefender: Boolean, attacks: Int, defenses: Int): Boolean =
         humanDefender && attacks > 0 && attacks == defenses
 }
