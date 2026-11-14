@@ -44,19 +44,8 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
     }
     private fun settings() { if (!ready) return; game.screen = SettingsScreen(game); dispose() }
     private fun choosePlayers() {
-        theme.image(stage,"lobby",12f,235f,456f,390f)
-        theme.label(stage,"ИГРА С БОТАМИ",30f,552f,420f,48f,28)
-        theme.label(stage,"Количество игроков",30f,500f,420f,34f,21)
-        for (count in 2..4) {
-            theme.button(stage,"$count","purple",36f+(count-2)*140f,397f,128f,78f,30) {
-                game.preferences.putBoolean(SettingsScreen.ORIENTATION,true).flush()
-                RuleSet(game.preferences).apply { playerCount=count; teamPlay=false; cardCount=36 }.save(game.preferences)
-                game.screen = GameScreen(game); dispose()
-            }
-        }
-        theme.button(stage,"ОТМЕНА","slate",60f,282f,360f,72f,22) {
-            game.screen = MainMenuScreen(game); dispose()
-        }
+        game.screen = BotSetupScreen(game)
+        dispose()
     }
     override fun render(delta: Float) {
         ready = game.assetManager.update()

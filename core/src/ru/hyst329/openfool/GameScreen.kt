@@ -169,7 +169,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         }
         // Initialise players
         // TODO: Replace with settings
-        val playerNames = arrayOf("Игрок_1", "Бот_1", "Бот_2", "Бот_3", "Бот_4")
+        val playerNames = Array(ruleSet.playerCount) { if (it == 0) "Игрок_1" else "Бот_$it" }
         players = Array(ruleSet.playerCount) { i -> Player(ruleSet, playerNames[i], i) }
         for (i in 0 until ruleSet.playerCount) {
             players[i].addListener(this)
@@ -393,8 +393,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         game.batch.begin()
         if (screenOrientationIsPortrait) {
             for (i in players.indices) {
-                val x = when (i) { 0 -> 20f; 1 -> 205f; 2 -> 25f; else -> 390f }
-                val y = when (i) { 0 -> 20f; 1 -> 825f; else -> 570f }
+                val x = when (i) { 0 -> 20f; 1 -> 205f; 2, 4 -> 20f; else -> 395f }
+                val y = when (i) { 0 -> 20f; 1 -> 825f; 2, 3 -> 635f; else -> 370f }
                 val size = if (i == 0) 66f else 64f
                 game.batch.draw(neon.texture(if (i == 0) "avatar" else "bot"),x,y,size,size)
                 val f = neon.font(17)
@@ -403,8 +403,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 if (i > 0) f.draw(game.batch,"${players[i].hand.size} карт",x-12f,y-25f,90f,com.badlogic.gdx.utils.Align.center,false)
             }
             neon.font(20).draw(game.batch,"${cardsRemaining()}",388f,778f)
-            val hint = if (isPlayerTaking) "${currentDefender.name} берёт" else if (currentDefender.index == 0) "Ваш ход: отбивайтесь" else if (currentThrower.index == 0) "Ваш ход: выберите карту" else "Ход соперника"
-            neon.font(18).draw(game.batch,hint,0f,340f,480f,com.badlogic.gdx.utils.Align.center,false)
+            val hint = if (isPlayerTaking) "${currentDefender.name} берёт" else if (currentDefender.index == 0) if (ruleSet.allowPass) "Отбейте или переведите картой того же ранга" else "Ваш ход: отбивайтесь" else if (currentThrower.index == 0) "Ваш ход: выберите карту" else "Ход соперника"
+            neon.font(if (ruleSet.allowPass) 15 else 18).draw(game.batch,hint,0f,340f,480f,com.badlogic.gdx.utils.Align.center,false)
         } else {
         for (i in 0 until ruleSet.playerCount) {
             val position = (if (i == 0) playerPosition else aiPosition).clone()
@@ -731,6 +731,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 if (currentAttackerIndex == players.size) currentAttackerIndex = 0
             } while (outOfPlay[currentAttackerIndex])
             currentThrowerIndex = currentAttackerIndex
+            throwLimit = min(DEAL_LIMIT, currentDefender.hand.size)
             logger.debug("Passed to: ${currentAttacker.name} -> ${currentDefender.name}")
         }
         if (event is Player.TakeEvent) {
@@ -843,9 +844,10 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         if (index == 0) return playerPosition.clone()
         if (screenOrientationIsPortrait) return when (index) {
             1 -> floatArrayOf(202f, 760f)
-            2 -> floatArrayOf(-10f, 650f)
-            3 -> floatArrayOf(435f, 650f)
-            else -> floatArrayOf(202f, 700f)
+            2 -> floatArrayOf(-10f, 720f)
+            3 -> floatArrayOf(425f, 720f)
+            4 -> floatArrayOf(-10f, 455f)
+            else -> floatArrayOf(425f, 455f)
         }
         val position = aiPosition.clone()
         if (ruleSet.playerCount > 2) position[0] += ((index - 1) * offset / (ruleSet.playerCount - 2)).toFloat()

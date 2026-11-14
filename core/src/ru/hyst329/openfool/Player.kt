@@ -321,11 +321,13 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
 //        else if (c.rank != ranks.first()) logger.debug("Passing impossible due to unsuitable rank")
 //        else if (attackCards.count { it == null } >= nextPlayerHandSize) logger.debug("Passing impossible due to card excess")
         return ruleSet.allowPass
+                && hand.contains(c)
+                && attackCards.any { it == null }
                 && defenseCards.all { it == null }
                 && attackCards.any { it != null }
                 && ranks.size == 1
                 && c.rank == ranks.first()
-                && attackCards.count { it == null } < nextPlayerHandSize
+                && attackCards.count { it != null } + 1 <= nextPlayerHandSize
     }
 
     fun passWithCard(c: Card,

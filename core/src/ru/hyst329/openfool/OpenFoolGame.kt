@@ -41,14 +41,20 @@ class OpenFoolGame(val orientationHelper: OrientationHelper) : Game() {
         val generator = FreeTypeFontGenerator(Gdx.files.internal("fonts/8835.otf"))
         val parameter = FreeTypeFontParameter()
         var chars: String = ""
-        for (i in 0x21..0x2040) {
+        for (i in 0x20..0x04ff) {
             chars += i.toChar()
         }
         parameter.characters = chars
-        parameter.size = 24
+        parameter.genMipMaps = true
+        parameter.minFilter = Texture.TextureFilter.MipMapLinearLinear
+        parameter.magFilter = Texture.TextureFilter.Linear
+        parameter.size = 72
         font = generator.generateFont(parameter)
-        parameter.size = 12
+        font.data.setScale(1f / 3f)
+        parameter.size = 36
         smallFont = generator.generateFont(parameter)
+        smallFont.data.setScale(1f / 3f)
+        generator.dispose()
 
         VisUI.load(Gdx.files.internal("ui/temp-skin.json"))
         preferences = Gdx.app.getPreferences("OpenFool")

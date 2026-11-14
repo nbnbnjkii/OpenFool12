@@ -20,17 +20,21 @@ internal class NeonTheme : Disposable {
     private val textures = HashMap<String, Texture>()
     private val fonts = HashMap<Int, BitmapFont>()
     fun texture(name: String): Texture = textures.getOrPut(name) {
-        Texture(Gdx.files.internal("neon/$name.png")).apply {
-            setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        Texture(Gdx.files.internal("neon/$name.png"), true).apply {
+            setFilter(Texture.TextureFilter.MipMapLinearLinear, Texture.TextureFilter.Linear)
         }
     }
     fun font(size: Int): BitmapFont = fonts.getOrPut(size) {
         val generator = FreeTypeFontGenerator(Gdx.files.internal("fonts/8835.otf"))
         val p = FreeTypeFontGenerator.FreeTypeFontParameter()
-        p.size = size
+        p.size = size * 3
+        p.genMipMaps = true
+        p.minFilter = Texture.TextureFilter.MipMapLinearLinear
+        p.magFilter = Texture.TextureFilter.Linear
         p.characters = (32..126).map { it.toChar() }.joinToString("") +
                 (0x410..0x44f).map { it.toChar() }.joinToString("") + "Ёё•→"
         val result = generator.generateFont(p)
+        result.data.setScale(1f / 3f)
         generator.dispose()
         result
     }
@@ -47,7 +51,9 @@ internal class NeonTheme : Disposable {
         val actor = object : Actor() {
             override fun draw(batch: Batch, parentAlpha: Float) {
                 val press = if (listeners.size > 0 && isPressed) 3f else 0f
+                batch.color = this.color
                 batch.draw(texture(color), x, y - press, width, height)
+                batch.color = Color.WHITE
                 val f = font(size)
                 f.color = Color.WHITE
                 f.draw(batch, text, x, y + height/2 + size/2 - press, width, Align.center, false)

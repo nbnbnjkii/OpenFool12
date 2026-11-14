@@ -6,7 +6,6 @@ package ru.hyst329.openfool
  */
 
 import com.badlogic.gdx.Preferences
-import kotlin.math.max
 
 class RuleSet(var deuceBeatsAce: Boolean = false,
               var loweredFirstDiscardLimit: Boolean = false,
@@ -16,7 +15,7 @@ class RuleSet(var deuceBeatsAce: Boolean = false,
               var cardCount: Int = 52) {
     var playerCount: Int = playerCount
     set(value) {
-        field = value
+        field = value.coerceIn(2, 6)
         teamPlay = teamPlay && (playerCount > 2 && playerCount % 2 == 0)
     }
     constructor(preferences: Preferences) : this() {
@@ -29,7 +28,7 @@ class RuleSet(var deuceBeatsAce: Boolean = false,
         // Team play only for even number of players (4 or 6 actually)
         teamPlay = teamPlay && (playerCount > 2 && playerCount % 2 == 0)
         // Card count must be a multiple of 4 and not less than 6 * cardCount
-        cardCount = max(6 * playerCount, (cardCount + 3) / 4 * 4)
+        cardCount = compatibleDeckSize(cardCount, playerCount)
     }
 
     fun save(preferences: Preferences) {
@@ -40,6 +39,12 @@ class RuleSet(var deuceBeatsAce: Boolean = false,
         preferences.putInteger("Rules/CardCount", cardCount)
         preferences.putBoolean("Rules/TeamPlay", teamPlay)
         preferences.flush()
+    }
+
+    companion object {
+        /** Never create a nonstandard 28/30/40-card deck when loading old preferences. */
+        internal fun compatibleDeckSize(requested: Int, players: Int): Int =
+                listOf(24, 36, 52).firstOrNull { it >= requested && it >= players * 6 } ?: 52
     }
 
     val lowestRank: Rank
