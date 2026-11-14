@@ -5,7 +5,9 @@ const suit=c=>c.slice(-1);
 export const beats=(card,target,trump)=>suit(card)===suit(target)?rank(card)>rank(target):suit(card)===trump;
 export class Room {
   constructor(owner,opts={}) {
-    this.id=randomUUID(); this.owner=owner.id; this.capacity=Number(opts.capacity??6);
+    this.id=randomUUID(); this.owner=owner.id;
+    this.stake=Number(opts.stake??250);check(Number.isInteger(this.stake)&&this.stake>=100&&this.stake<=10000000,'Ставка: 100–10 000 000');
+    this.perks=new Map();this.undo=null; this.capacity=Number(opts.capacity??6);
     this.bots=opts.addBots===true?Number(opts.bots??1):0;
     check(Number.isInteger(this.capacity)&&this.capacity>=2&&this.capacity<=6,'Нужно 2–6 мест');
     check(Number.isInteger(this.bots)&&this.bots>=0&&this.bots<=this.capacity-2,'Оставьте минимум 2 места людям');
@@ -39,7 +41,41 @@ export class Room {
     this.limit=Math.min(6,this.players[this.defender].hand.length);this.phase='playing';this.turn=this.attacker;this.arm();this.touch();
   }
   arm() {this.deadline=Date.now()+30000;}
-  action(id,action) {check(this.phase==='playing','Партия не идёт');const seat=this.seat(id);check(seat===this.turn,'Сейчас не ваш ход');this.apply(seat,action);this.touch();}
+  action(id,action) {
+    check(this.phase==='playing','Партия не идёт');const seat=this.seat(id);check(seat===this.turn,'Сейчас не ваш ход');
+    check(!this.undo||Date.now()>=this.undo.until,'Подождите окно отмены хода');
+    const saved=this.snapshot();this.apply(seat,action);this.undo=null;
+    if(action.type==='play'&&!this.players[seat].bot&&this.phase==='playing'&&this.discard.length===saved.discard.length&&this.deck.length===saved.deck.length) {
+      this.undo={id,until:Date.now()+3000,saved};this.deadline+=3000;
+    }
+    this.touch();
+  }
+  snapshot() {
+    const keys=['deck','table','discard','attacker','defender','turn','limit','taking','phase','deadline'];
+    return {...Object.fromEntries(keys.map(k=>[k,structuredClone(this[k])])),hands:this.players.map(p=>p.hand.slice()),out:this.players.map(p=>p.out),done:[...this.done]};
+  }
+  perk(id,type,pay) {
+    const seat=this.seat(id);check(this.phase==='playing'&&!this.players[seat].out,'Партия для вас завершена');
+    if(type==='undo') {
+      check(this.undo&&this.undo.id===id&&Date.now()<this.undo.until,'Отмена доступна 3 секунды до ответа соперника');
+      pay(2);const saved=this.undo.saved;
+      for(const key of ['deck','table','discard','attacker','defender','turn','limit','taking','phase','deadline'])this[key]=saved[key];
+      this.players.forEach((p,i)=>{p.hand=saved.hands[i];p.out=saved.out[i];});this.done=new Set(saved.done);this.undo=null;this.arm();
+    } else {
+      check(type==='highlight'||type==='discard','Неизвестный инструмент');
+      const perks=this.perks.get(id)||{};
+      if(!perks[type]){pay(type==='highlight'?1:3);perks[type]=true;this.perks.set(id,perks);}
+    }
+    this.touch();
+  }
+  legalHints(id) {
+    const seat=this.seat(id);if(this.phase!=='playing'||this.turn!==seat)return [];
+    return this.players[seat].hand.filter(card=>{
+      if(seat===this.defender&&!this.taking)return this.table.some(x=>!x.defense&&beats(card,x.attack,this.trump))||
+        this.pass&&this.table.every(x=>!x.defense)&&this.table.length<6&&this.players[this.next(seat)].hand.length>=this.table.length+1&&rank(card)===rank(this.table[0].attack);
+      return this.table.length<this.limit&&(!this.table.length||this.table.some(x=>rank(x.attack)===rank(card)||x.defense&&rank(x.defense)===rank(card)));
+    });
+  }
   apply(seat,a) {
     const p=this.players[seat];const card=a.card;const initial=this.table.length===0;
     if(a.type==='surrender') {this.surrender(p.id);return;}
@@ -88,7 +124,8 @@ export class Room {
   }
   surrender(id) {
     const p=this.players[this.seat(id)];if(p.surrendered)return;
-    check(this.phase==='playing','Партия не идёт');
+    check(this.phase==='playing','Партия не идёт');check(!p.out,'Вы уже закончили игру');
+    this.undo=null;
     p.surrendered=true;p.out=true;this.discard.push(...p.hand);p.hand=[];
     // Current round is settled safely before continuing with the remaining live seats.
     if(this.players.filter(p=>!p.out).length<=1){this.phase='ended';this.turn=-1;}
@@ -102,7 +139,7 @@ export class Room {
   }
   leave(id) {
     const i=this.seat(id);
-    if(this.phase==='playing')this.surrender(id);
+    if(this.phase==='playing'){if(!this.players[i].out)this.surrender(id);}
     else {this.players.splice(i,1);if(this.owner===id)this.owner=this.players.find(p=>!p.bot)?.id??null;this.touch();}
   }
   botAction() {
@@ -117,12 +154,16 @@ export class Room {
   }
   tick(now=Date.now()) {
     if(this.phase!=='playing')return;
+    if(this.undo&&now<this.undo.until)return;this.undo=null;
     const p=this.players[this.turn];if(!p)return;
     if((p.bot&&now>this.deadline-29200)||now>=this.deadline){this.apply(this.turn,this.botAction());this.touch();}
   }
   view(id) {
     const own=this.seat(id);
-    return {id:this.id,code:this.code,owner:this.owner,capacity:this.capacity,bots:this.bots,pass:this.pass,
+    const perks=this.perks.get(id)||{};
+    return {id:this.id,code:this.code,owner:this.owner,capacity:this.capacity,bots:this.bots,pass:this.pass,stake:this.stake,
+      perks,undoUntil:this.undo?.id===id?this.undo.until:0,lockedUntil:this.undo?.until??0,
+      ...(perks.discard?{discard:this.discard}:{}),...(perks.highlight?{hints:this.legalHints(id)}:{}),
       phase:this.phase,version:this.version,seat:own,turn:this.turn??-1,attacker:this.attacker??-1,defender:this.defender??-1,
       deadline:this.deadline??0,serverTime:Date.now(),trump:this.trump??'',trumpCard:this.trumpCard??'',remaining:this.deck?.length??0,
       table:this.table??[],taking:this.taking??false,

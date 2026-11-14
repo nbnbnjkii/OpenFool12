@@ -1,0 +1,8 @@
+[Unit]
+Description=Renew OpenFool IP HTTPS certificate and reload nginx
+Wants=network-online.target docker.service
+After=network-online.target docker.service nginx.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /opt/openfool/server/renew-ip-certificate.sh

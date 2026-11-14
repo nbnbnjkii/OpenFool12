@@ -24,12 +24,22 @@ internal class OnlineApi(private val game: OpenFoolGame) {
     var playerId: String
         get()=game.preferences.getString("Auth/PlayerId","")
         private set(value) { game.preferences.putString("Auth/PlayerId",value).flush() }
+    val supportsEconomy: Boolean get()=game.preferences.getBoolean("Auth/ServerEconomy",false)
+    val coins: Int get()=game.preferences.getInteger("Auth/Coins",10000)
+    val crystals: Int get()=game.preferences.getInteger("Auth/Crystals",20)
+    fun updateWallet(wallet: JsonValue?) {
+        if(wallet==null)return
+        game.preferences.putInteger("Auth/Coins",wallet.getInt("coins"))
+            .putInteger("Auth/Crystals",wallet.getInt("crystals")).flush()
+    }
     fun remember(response: JsonValue) {
         token=response.getString("token")
         updateProfile(response.get("user"))
     }
     fun updateProfile(user: JsonValue) {
         playerId=user.getString("id")
+        game.preferences.putBoolean("Auth/ServerEconomy",user.has("wallet")).flush()
+        updateWallet(user.get("wallet"))
         PlayerProfile(game.preferences).save(user.getString("nickname"),user.getInt("avatar"))
     }
     fun logout() {
@@ -38,7 +48,7 @@ internal class OnlineApi(private val game: OpenFoolGame) {
     }
     fun request(method: String,path: String,body: JsonValue?=null,ok: (JsonValue)->Unit,error: (String)->Unit) {
         val req=Net.HttpRequest(method)
-        req.url="https://vm670328.eurodir.ru/v1$path"
+        req.url="${ServerEndpoint.BASE_URL}$path"
         req.timeOut=12000
         req.setHeader("Accept","application/json")
         if (token.isNotEmpty()) req.setHeader("Authorization","Bearer $token")
@@ -48,7 +58,11 @@ internal class OnlineApi(private val game: OpenFoolGame) {
                 val status=response.status.statusCode
                 val parsed=try { JsonReader().parse(response.resultAsString) } catch (_: Exception) { null }
                 Gdx.app.postRunnable {
-                    if (status in 200..299 && parsed!=null) ok(parsed)
+                    if (status in 200..299 && parsed!=null) {
+                        updateWallet(parsed.get("wallet"))
+                        updateWallet(parsed.get("room")?.get("wallet"))
+                        ok(parsed)
+                    }
                     else error(parsed?.getString("error",null) ?: "Сервер недоступен (HTTP $status). Проверьте установку и HTTPS.")
                 }
             }

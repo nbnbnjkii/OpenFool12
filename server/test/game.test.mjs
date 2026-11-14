@@ -25,7 +25,7 @@ test('out-of-turn actions and joining started rooms are rejected',()=>{
 test('automated legal games finish for every count and conserve all cards',()=>{
  for(let count=2;count<=6;count++)for(let trial=0;trial<8;trial++){
   const r=game(count);let moves=0;
-  while(r.phase==='playing'&&moves<20000){const action=r.botAction();r.action(r.players[r.turn].id,action);moves++;
+  while(r.phase==='playing'&&moves<20000){r.undo=null;const action=r.botAction();r.action(r.players[r.turn].id,action);moves++;
    const cards=r.deck.concat(r.discard,r.players.flatMap(p=>p.hand),r.table.flatMap(p=>[p.attack,...(p.defense?[p.defense]:[])]));
    assert.equal(cards.length,r.deckSize);assert.equal(new Set(cards).size,r.deckSize);
   }
@@ -35,7 +35,7 @@ test('automated legal games finish for every count and conserve all cards',()=>{
 test('surrender is idempotent, never reveals other hands, and remaining players can continue',()=>{
  const r=game(6);r.surrender('user-0');r.surrender('user-0');assert.equal(r.players[0].surrendered,true);assert.equal(r.players[0].hand.length,0);
  assert.equal(r.view('user-1').players[2].hand,undefined);
- let moves=0;while(r.phase==='playing'&&moves++<20000)r.action(r.players[r.turn].id,r.botAction());assert.equal(r.phase,'ended');
+ let moves=0;while(r.phase==='playing'&&moves++<20000){r.undo=null;r.action(r.players[r.turn].id,r.botAction());}assert.equal(r.phase,'ended');
 });
 test('clockwise throw-in visits every nondefender, and taking skips the defender attack',()=>{
  const r=game(6);r.attacker=0;r.defender=1;r.turn=0;r.limit=6;r.table=[{attack:'6h',defense:'7h'}];r.done.clear();

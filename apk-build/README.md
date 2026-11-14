@@ -217,7 +217,9 @@ The first screen is registration/login; HTTPS session verification opens the men
 on subsequent launches without storing a password. Sessions expire after 30 days.
 Settings includes logout; server-backed profile changes synchronize nickname/avatar.
 `server/README.md` contains the complete VPS/Docker/nginx/HTTPS installation guide.
-The Android endpoint is https://vm670328.eurodir.ru/v1; no deployment is automatic.
+As of 0.11.1, the Android endpoint is https://46.30.41.204/v1; no deployment is automatic.
+See server/IP-HTTPS.md for trusted IP certificate issuance and automatic renewal.
+TLS validation stays enabled; there is no HTTP fallback or trust-all certificate code.
 Until that backend and TLS are installed, the new APK cannot register or log in.
 
 Friend setup supports 2–6 seats with zero bots by default; explicit opt-in allows
@@ -237,3 +239,44 @@ SQLite persists accounts/sessions/friends, but active matches and invites are in
 memory and close on server restart. Offline bot gameplay retains its existing
 wallet/perk rules. Server API and game tests are automated; VPS deployment and
 real multi-device gameplay have not been verified in this environment.
+
+## Friend table visual parity (0.12.0)
+
+Friend room creation now uses the same player-count, deck, mode, heading, Back,
+and primary-button geometry as bot setup. Its optional bot selector replaces the
+stake region; entering a room code has a separate view, not an overlapping field.
+The server API and free-match rules are unchanged; updating the VPS is unnecessary.
+
+The network table uses the local table background at full portrait size, the same
+HandFan algorithm and actual deck texture sizes, lowered/masked own hand, seats,
+HUD artwork, action slot, flag, wallet readout, table pairs and deck geometry.
+Opponent cards are backs only. The deck has a rotated exposed trump card and white
+count directly on the back, without a black badge; after the deck empties the
+trump caption and suit occupy the same positions as the local HUD. Local/net
+drop zones and deck coordinates are shared in PortraitTableLayout.
+
+Room code and a friend-invite icon remain above the table. Host Start is placed
+in the same action slot after Ready. Paid offline tools have dimmed matching icons
+with an explanatory message and never charge crystals in a network match. Network
+stakes remain zero. Server ownership, hidden hands, legality checks and turn
+deadlines are unchanged. New hand cards animate from the deck on match start.
+Automated geometry tests compare the fan for 1–52 cards across all deck widths.
+Real-phone screenshot parity and multi-device play still need manual verification.
+
+
+## Server stakes and tools (0.13.0)
+
+Requires updating both the backend and APKs. Server wallets are separate from
+local offline balances, initialized once to 10000 coins/20 crystals and persisted
+in SQLite. Friend setup has the same balance-limited WagerSlider as bot setup;
+opt-in bots have a separate setup page. All human escrows reserve atomically at
+Start. Leaving before Start is free; surrender during play consumes the stake
+once without a separate exit fee. Client waits for acknowledged departure.
+Settlement is idempotent; restart refunds unsettled, but never lost wagers.
+
+Highlight (1/game), discard viewer (3/game) and undo (2/success) are server-validated.
+The undo window holds replies for 3 seconds and only restores pre-reply snapshots
+without card draws/round completion. Own-card hints and purchased discard contents
+are private to the buyer. Viewer closes on any tap/Back. No client wallet totals
+are imported into the server. The main menu labels its network wallet explicitly.
+Backend health version is 2; see ../server/README.md for the safe Docker update.
