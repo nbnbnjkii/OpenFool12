@@ -13,8 +13,8 @@ android {
         applicationId 'ru.hyst329.openfool'
         minSdk 21
         targetSdk 35
-        versionCode 42
-        versionName '0.9.2-neon'
+        versionCode 43
+        versionName '0.9.3-neon'
     }
     sourceSets.main {
         manifest.srcFile '../android/AndroidManifest.xml'

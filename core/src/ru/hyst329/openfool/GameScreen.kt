@@ -1004,12 +1004,13 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         neon.font(16).draw(batch,"Ставка: ${WagerPolicy.label(stake)}",320f,968f,123f,com.badlogic.gdx.utils.Align.right,false)
         batch.draw(neon.texture("coin"),450f,950f,21f,21f)
         val suit = suitSymbols[trumpSuit]
-        suit?.setBounds(400f,872f,28f,28f)
+        suit?.setBounds(430f,850f,32f,32f)
         suit?.setScale(1f)
         suit?.draw(batch)
         neon.font(15).color = Color.WHITE
-        neon.font(15).draw(batch,"Козырь",391f,925f)
-        neon.font(16).draw(batch,"${cardsRemaining()} карт",326f,835f,130f,com.badlogic.gdx.utils.Align.center,false)
+        neon.font(15).draw(batch,"Козырь",413f,908f,65f,com.badlogic.gdx.utils.Align.center,false)
+        neon.font(30).color = Color.WHITE
+        neon.font(30).draw(batch,"${cardsRemaining()}",328f,947f,80f,com.badlogic.gdx.utils.Align.center,false)
 
 
         val actions = humanActions()
@@ -1300,7 +1301,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         private const val HH_AI_PORTRAIT = CARD_SCALE_AI_PORTRAIT * 270
         private const val HH_PLAYER_PORTRAIT = CARD_SCALE_PLAYER_PORTRAIT * 270
 
-        private val DECK_POSITION_PORTRAIT = floatArrayOf(332f, 844f)
+        private val DECK_POSITION_PORTRAIT = floatArrayOf(332f, 804f)
         private val DISCARD_PILE_POSITION_PORTRAIT = floatArrayOf(435 - HW_TABLE_PORTRAIT, 400 - HH_TABLE_PORTRAIT)
         private val PLAYER_POSITION_PORTRAIT = floatArrayOf(90 - HW_PLAYER_PORTRAIT, 195 - HH_PLAYER_PORTRAIT)
         private val AI_POSITION_PORTRAIT = floatArrayOf(40 - HW_AI_PORTRAIT, 800 - HH_AI_PORTRAIT)
