@@ -142,9 +142,9 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
         actor.setBounds(x,y,w,h);stage.addActor(actor);return actor
     }
     private fun leave(newTable: Boolean) {
-        call("POST","/rooms/leave",jsonObject("code" to code)) {
-            if(newTable){game.screen=FriendSetupScreen(game);dispose()}else menu()
-        }
+        // Best-effort departure must not trap the user if the server restarted.
+        game.online.request("POST","/rooms/leave",jsonObject("code" to code),{},{})
+        if(newTable){game.screen=FriendSetupScreen(game);dispose()}else menu()
     }
     fun onPlatformBack() { back() }
     override fun back() {

@@ -37,3 +37,19 @@ test('surrender is idempotent, never reveals other hands, and remaining players 
  assert.equal(r.view('user-1').players[2].hand,undefined);
  let moves=0;while(r.phase==='playing'&&moves++<20000)r.action(r.players[r.turn].id,r.botAction());assert.equal(r.phase,'ended');
 });
+test('clockwise throw-in visits every nondefender, and taking skips the defender attack',()=>{
+ const r=game(6);r.attacker=0;r.defender=1;r.turn=0;r.limit=6;r.table=[{attack:'6h',defense:'7h'}];r.done.clear();
+ const seen=[];
+ for(let n=0;n<5;n++){seen.push(r.turn);r.action(r.players[r.turn].id,{type:'done'});}
+ assert.deepEqual(seen,[0,2,3,4,5]);
+ const took=game(6);took.attacker=0;took.defender=1;took.turn=1;took.limit=6;took.table=[{attack:'6h',defense:null}];
+ took.action(took.players[1].id,{type:'take'});assert.equal(took.turn,0);
+ for(let n=0;n<5;n++)took.action(took.players[took.turn].id,{type:'done'});
+ assert.equal(took.attacker,2);
+});
+test('pass advances to the next clockwise defender only when the transfer is legal',()=>{
+ const r=game(6);r.pass=true;r.attacker=0;r.defender=1;r.turn=1;r.table=[{attack:'6h',defense:null}];
+ r.players[1].hand=['6s','7h'];r.players[2].hand=['8h','9h','10h'];
+ r.action(r.players[1].id,{type:'play',card:'6s',pass:true});assert.equal(r.attacker,1);assert.equal(r.defender,2);assert.equal(r.turn,2);
+ assert.throws(()=>r.action(r.players[2].id,{type:'play',card:'8h',pass:true}));
+});

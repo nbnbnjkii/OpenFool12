@@ -38,7 +38,7 @@ export function createService({dbPath=process.env.DATABASE_PATH||'data/openfool.
     res.setHeader('Content-Type','application/json; charset=utf-8');res.setHeader('Cache-Control','no-store');res.setHeader('X-Content-Type-Options','nosniff');
     try {
       const ip=trustProxy?String(req.headers['x-real-ip']||req.socket.remoteAddress):req.socket.remoteAddress;
-      rate(`all:${ip}`,360);const path=new URL(req.url,'http://local').pathname;const method=req.method;
+      rate(`all:${ip}`,1200);const path=new URL(req.url,'http://local').pathname;const method=req.method;
       if(path==='/health'){res.end(JSON.stringify({ok:true,version:1}));return;}
       const b=['POST','PUT'].includes(method)?await body(req):{};let result;
       if(path==='/v1/auth/register'||path==='/v1/auth/login') {
@@ -61,12 +61,12 @@ export function createService({dbPath=process.env.DATABASE_PATH||'data/openfool.
           }
           const token=randomBytes(32).toString('base64url');const expires=Date.now()+30*24*60*60*1000;
           db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(digest(token),u.id,expires);
-          result={token,expires,user:publicUser(u)};
+          result={token,expires,user:publicUser(u),...(activeRoom(u.id)?{room:activeRoom(u.id).view(u.id)}:{})};
         }finally{pendingHashes--;}
       } else {
         const u=auth(req);rate(`user:${u.id}`,240);
         const room=()=>{const r=rooms.get(String(b.code??''));check(r,'Комната не найдена или закрыта');r.seat(u.id);return r;};
-        if(path==='/v1/me'&&method==='GET')result={user:publicUser(u)};
+        if(path==='/v1/me'&&method==='GET')result={user:publicUser(u),...(activeRoom(u.id)?{room:activeRoom(u.id).view(u.id)}:{})};
         else if(path==='/v1/me'&&method==='PUT') {db.prepare('UPDATE users SET nickname=?,avatar=? WHERE id=?').run(name(b.nickname),avatar(b.avatar),u.id);result={user:publicUser(user(u.id))};}
         else if(path==='/v1/auth/logout'&&method==='POST'){db.prepare('DELETE FROM sessions WHERE token=?').run(digest((req.headers.authorization||'').replace(/^Bearer /,'')));result={ok:true};}
         else if(path==='/v1/rooms'&&method==='POST') {

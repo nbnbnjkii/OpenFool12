@@ -36,3 +36,16 @@ test('register/login sessions, rooms, reciprocal friends and authenticated invit
  const hashes=service.db.prepare('SELECT password FROM users').all();assert.ok(hashes.every(x=>!x.password.includes('long-pass')));
  assert.ok(service.db.prepare('SELECT token FROM sessions').all().every(x=>x.token!==b.token));
 });
+
+test('database keeps accounts and saved sessions after service restart',async()=>{
+ const {mkdtempSync,rmSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+ const folder=mkdtempSync(join(tmpdir(),'openfool-test-'));let service;
+ try {
+  const dbPath=join(folder,'accounts.sqlite');service=createService({dbPath});await new Promise(r=>service.server.listen(0,'127.0.0.1',r));
+  let base=`http://127.0.0.1:${service.server.address().port}/v1`;
+  const account=await (await fetch(base+'/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({login:'persistent',password:'my-safe-test-password'})})).json();
+  service.close();service=createService({dbPath});await new Promise(r=>service.server.listen(0,'127.0.0.1',r));
+  base=`http://127.0.0.1:${service.server.address().port}/v1`;
+  const me=await fetch(base+'/me',{headers:{Authorization:`Bearer ${account.token}`}});assert.equal(me.status,200);assert.equal((await me.json()).user.id,account.user.id);
+ }finally{service?.close();rmSync(folder,{recursive:true,force:true});}
+});

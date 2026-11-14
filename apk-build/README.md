@@ -211,13 +211,29 @@ Save persists both to local preferences; Back discards unsaved edits. The lobby
 and human seat show the saved profile. Bots get different avatars. Appearance
 retains deck selection with preview, sorting, background, and game language.
 
-Network status: friend rooms, friend lists, invitations, and multiplayer are NOT
-implemented by this profile release. No request is sent to vm670328.eurodir.ru and
-no live-server deployment or connectivity is claimed. Existing online/friend
-buttons still explain that networking is unavailable and do not charge coins.
-To integrate the requested server we need its existing API contract, or confirmation
-that a new backend should be installed. Do not put SSH keys/passwords in the repo.
-Four-digit room codes must be allocated atomically by the server, expire, and be
-rate-limited; they are room locators, not account authentication. A real multiplayer
-backend must validate turns and keep each hand private, and friend requests/invites
-must use stable authenticated player IDs rather than nicknames or room codes.
+## Accounts and friend rooms (0.11.0)
+
+The first screen is registration/login; HTTPS session verification opens the menu
+on subsequent launches without storing a password. Sessions expire after 30 days.
+Settings includes logout; server-backed profile changes synchronize nickname/avatar.
+`server/README.md` contains the complete VPS/Docker/nginx/HTTPS installation guide.
+The Android endpoint is https://vm670328.eurodir.ru/v1; no deployment is automatic.
+Until that backend and TLS are installed, the new APK cannot register or log in.
+
+Friend setup supports 2–6 seats with zero bots by default; explicit opt-in allows
+up to four bots while reserving at least two human seats. Four-digit codes are
+server-allocated. The host starts only after the human players are ready. Cards
+are dragged onto a server-authoritative table; only the owner's hand is delivered
+to that phone. 30-second turn deadlines and bot actions run on the server.
+
+Tapping a live player sends a friend request; recipients accept in Friends.
+The table's invite button opens the paginated friend list. Invitations show yes/no
+in the recipient's main menu while the app is open. An existing active table can
+be resumed on app startup with the same account while the backend remains running.
+
+Limitations: these first friend-network matches are free, without local-wallet
+stakes/perks, rankings, public matchmaking, or background push notifications.
+SQLite persists accounts/sessions/friends, but active matches and invites are in
+memory and close on server restart. Offline bot gameplay retains its existing
+wallet/perk rules. Server API and game tests are automated; VPS deployment and
+real multi-device gameplay have not been verified in this environment.

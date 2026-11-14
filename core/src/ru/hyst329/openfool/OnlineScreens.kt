@@ -62,8 +62,11 @@ internal class AuthScreen(game: OpenFoolGame,verify: Boolean=true) : OnlineScree
         form()
         if(verify&&game.online.token.isNotEmpty()) {
             status.setText("Проверяем сохранённый вход...")
-            call("GET","/me") {game.online.updateProfile(it.get("user"));menu()}
+            call("GET","/me") {game.online.updateProfile(it.get("user"));enter(it)}
         }
+    }
+    private fun enter(result: JsonValue) {
+        if(result.has("room")){game.screen=NetworkTableScreen(game,result.get("room"));dispose()}else menu()
     }
     private fun form() {
         base(if(registration)"РЕГИСТРАЦИЯ" else "ВХОД В АККАУНТ")
@@ -79,7 +82,7 @@ internal class AuthScreen(game: OpenFoolGame,verify: Boolean=true) : OnlineScree
             else {
                 Gdx.input.setOnscreenKeyboardVisible(false)
                 call("POST",if(registration)"/auth/register" else "/auth/login",jsonObject("login" to login.text,"password" to password.text,"nickname" to login.text)) {
-                    password.text="";confirmation?.text="";game.online.remember(it);menu()
+                    password.text="";confirmation?.text="";game.online.remember(it);enter(it)
                 }
             }
         }
@@ -128,36 +131,48 @@ internal class FriendSetupScreen(game: OpenFoolGame) : OnlineScreen(game) {
 }
 
 internal class FriendsScreen(game: OpenFoolGame,private val code: String?=null) : OnlineScreen(game) {
+    private var page=0
     init {base(if(code==null)"ДРУЗЬЯ" else "ПРИГЛАСИТЬ ДРУГА");load()}
     private fun load() {
         call("GET","/friends") {response ->
             base(if(code==null)"ДРУЗЬЯ" else "ПРИГЛАСИТЬ ДРУГА")
+            val entries=ArrayList<Pair<JsonValue,Boolean>>()
+            for(p in response.get("requests"))entries.add(p to true)
+            for(p in response.get("friends"))entries.add(p to false)
+            val pages=((entries.size+4)/5).coerceAtLeast(1)
+            page=page.coerceIn(0,pages-1)
             var y=800f
-            val requests=response.get("requests")
-            for(p in requests){
-                if(y<300f)break
-                theme.label(stage,p.getString("nickname")+" — запрос",20f,y,440f,35f,19);y-=60f
+            for((p,request) in entries.drop(page*5).take(5)) {
                 val id=p.getString("id")
-                theme.button(stage,"ПРИНЯТЬ","green",25f,y,205f,48f,19){respond(id,true)}
-                theme.button(stage,"ОТКЛОНИТЬ","slate",250f,y,205f,48f,18){respond(id,false)};y-=65f
-            }
-            for(p in response.get("friends")) {
-                if(y<230f)break
-                val id=p.getString("id")
-                theme.iconButton(stage,"avatar_${p.getInt("avatar")}",25f,y-15f,52f){}
-                theme.label(stage,p.getString("nickname"),80f,y-5f,240f,42f,21)
-                if(code!=null)theme.button(stage,"ЗВАТЬ","purple",328f,y-5f,125f,46f,20){
-                    call("POST","/invites",jsonObject("code" to code,"playerId" to id)){status.setText("Приглашение отправлено на 2 минуты")}
+                if(request) {
+                    theme.label(stage,p.getString("nickname")+" — запрос",20f,y,440f,35f,19)
+                    theme.button(stage,"ПРИНЯТЬ","green",25f,y-58f,205f,48f,19){respond(id,true)}
+                    theme.button(stage,"ОТКЛОНИТЬ","slate",250f,y-58f,205f,48f,18){respond(id,false)}
+                } else {
+                    theme.iconButton(stage,"avatar_${p.getInt("avatar")}",25f,y-15f,52f){}
+                    theme.label(stage,p.getString("nickname"),80f,y-5f,240f,42f,21).setEllipsis(true)
+                    if(code!=null)theme.button(stage,"ЗВАТЬ","purple",328f,y-5f,125f,46f,20){
+                        call("POST","/invites",jsonObject("code" to code,"playerId" to id)){status.setText("Приглашение отправлено на 2 минуты")}
+                    }
                 }
-                y-=75f
+                y-=112f
             }
-            if(response.get("friends").size==0&&requests.size==0)status.setText("Нажмите на живого игрока за столом, чтобы отправить запрос в друзья.")
+            if(entries.isEmpty())status.setText("Нажмите на живого игрока за столом, чтобы отправить запрос в друзья.")
+            theme.button(stage,"<","slate",25f,225f,90f,48f,24){page=(page-1).coerceAtLeast(0);load()}
+            theme.label(stage,"${page+1} / $pages",125f,225f,230f,48f,19)
+            theme.button(stage,">","slate",365f,225f,90f,48f,24){page=(page+1).coerceAtMost(pages-1);load()}
             theme.button(stage,"ОБНОВИТЬ","slate",25f,46f,430f,60f,22){load()}
         }
     }
     private fun respond(id: String,accept: Boolean){call("POST","/friends/respond",jsonObject("playerId" to id,"accept" to accept)){load()}}
     override fun back() {
-        if(code==null)menu() else call("POST","/rooms/state",jsonObject("code" to code)){game.screen=NetworkTableScreen(game,it.get("room"));dispose()}
+        if(code==null)menu() else {
+            if(busy)return
+            busy=true
+            game.online.request("POST","/rooms/state",jsonObject("code" to code),{
+                if(alive){game.screen=NetworkTableScreen(game,it.get("room"));dispose()}
+            },{if(alive)menu()})
+        }
     }
 }
 
@@ -171,5 +186,8 @@ internal class InvitationScreen(game: OpenFoolGame,private val invitation: JsonV
     private fun respond(accept: Boolean){call("POST","/invites/respond",jsonObject("inviteId" to invitation.getString("id"),"accept" to accept)) {
         if(accept){game.screen=NetworkTableScreen(game,it.get("room"));dispose()}else menu()
     }}
-    override fun back(){respond(false)}
+    override fun back(){
+        game.online.request("POST","/invites/respond",jsonObject("inviteId" to invitation.getString("id"),"accept" to false),{},{})
+        menu()
+    }
 }
