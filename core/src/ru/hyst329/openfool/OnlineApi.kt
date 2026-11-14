@@ -38,7 +38,7 @@ internal class OnlineApi(private val game: OpenFoolGame) {
     }
     fun request(method: String,path: String,body: JsonValue?=null,ok: (JsonValue)->Unit,error: (String)->Unit) {
         val req=Net.HttpRequest(method)
-        req.url="https://vm670328.eurodir.ru/v1$path"
+        req.url="${ServerEndpoint.BASE_URL}$path"
         req.timeOut=12000
         req.setHeader("Accept","application/json")
         if (token.isNotEmpty()) req.setHeader("Authorization","Bearer $token")

@@ -2,7 +2,7 @@ name: Android APK
 on:
   workflow_dispatch:
   push:
-    branches: ['arena/2937ce90-openfool12']
+    branches: ['arena/055fadce-openfool12']
     paths: ['core/**', 'android/**', 'apk-build/**', '.github/workflows/android-apk.yml']
 permissions:
   contents: read

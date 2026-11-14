@@ -217,7 +217,9 @@ The first screen is registration/login; HTTPS session verification opens the men
 on subsequent launches without storing a password. Sessions expire after 30 days.
 Settings includes logout; server-backed profile changes synchronize nickname/avatar.
 `server/README.md` contains the complete VPS/Docker/nginx/HTTPS installation guide.
-The Android endpoint is https://vm670328.eurodir.ru/v1; no deployment is automatic.
+As of 0.11.1, the Android endpoint is https://46.30.41.204/v1; no deployment is automatic.
+See server/IP-HTTPS.md for trusted IP certificate issuance and automatic renewal.
+TLS validation stays enabled; there is no HTTP fallback or trust-all certificate code.
 Until that backend and TLS are installed, the new APK cannot register or log in.
 
 Friend setup supports 2–6 seats with zero bots by default; explicit opt-in allows
