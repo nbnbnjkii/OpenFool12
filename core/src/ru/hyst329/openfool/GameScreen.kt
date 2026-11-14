@@ -393,8 +393,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         game.batch.begin()
         if (screenOrientationIsPortrait) {
             for (i in players.indices) {
-                val x = if (i == 0) 20f else if (ruleSet.playerCount == 2) 205f else 30f + (i-1)*360f/(ruleSet.playerCount-2)
-                val y = if (i == 0) 20f else 825f
+                val x = when (i) { 0 -> 20f; 1 -> 205f; 2 -> 25f; else -> 390f }
+                val y = when (i) { 0 -> 20f; 1 -> 825f; else -> 570f }
                 val size = if (i == 0) 66f else 64f
                 game.batch.draw(neon.texture(if (i == 0) "avatar" else "bot"),x,y,size,size)
                 val f = neon.font(17)
@@ -516,9 +516,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 player.addCard(card)
                 val cardActor = cardActors[card]
                 cardActor?.isFaceUp = (playerIndex == 0)
-                val position = (if (playerIndex == 0) playerPosition else aiPosition).clone()
-                if (playerIndex > 0 && ruleSet.playerCount > 2)
-                    position[0] += ((playerIndex - 1) * offset / (ruleSet.playerCount - 2)).toFloat()
+                val position = handPosition(playerIndex)
                 val delta = (if (playerIndex == 0) playerDelta else aiDelta).clone()
                 val index = player.hand.size - 1
                 val posX = position[0] + index * delta[0]
@@ -638,10 +636,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             logger.debug("${thrower.name} (${thrower.index}) throws $throwCard")
             for (i in 0 until thrower.hand.size) {
                 val cardActor = cardActors[thrower.hand[i]]
-                val position = (if (thrower.index == 0) playerPosition else aiPosition).clone()
+                val position = handPosition(thrower.index)
                 val delta = (if (thrower.index == 0) playerDelta else aiDelta).clone()
-                if (thrower.index > 0 && ruleSet.playerCount > 2)
-                    position[0] += ((thrower.index - 1) * offset / (ruleSet.playerCount - 2)).toFloat()
                 val posX = position[0] + i * delta[0]
                 val posY = position[1] + i * delta[1]
                 //cardActor.addAction(Actions.moveTo(posX, posY, 0.1f));
@@ -680,10 +676,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             logger.debug("${beater.name} (${beater.index}) beats with $beatCard\n")
             for (i in 0 until beater.hand.size) {
                 val cardActor = cardActors[beater.hand[i]]
-                val position = (if (beater.index == 0) playerPosition else aiPosition).clone()
+                val position = handPosition(beater.index)
                 val delta = (if (beater.index == 0) playerDelta else aiDelta).clone()
-                if (beater.index > 0 && ruleSet.playerCount > 2)
-                    position[0] += ((beater.index - 1) * offset / (ruleSet.playerCount - 2)).toFloat()
                 val posX = position[0] + i * delta[0]
                 val posY = position[1] + i * delta[1]
                 //cardActor.addAction(Actions.moveTo(posX, posY, 0.1f));
@@ -722,10 +716,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             logger.debug("${thrower.name} (${thrower.index}) passes with $passCard\n")
             for (i in 0 until thrower.hand.size) {
                 val cardActor = cardActors[thrower.hand[i]]
-                val position = (if (thrower.index == 0) playerPosition else aiPosition).clone()
+                val position = handPosition(thrower.index)
                 val delta = (if (thrower.index == 0) playerDelta else aiDelta).clone()
-                if (thrower.index > 0 && ruleSet.playerCount > 2)
-                    position[0] += ((thrower.index - 1) * offset / (ruleSet.playerCount - 2)).toFloat()
                 val posX = position[0] + i * delta[0]
                 val posY = position[1] + i * delta[1]
                 //cardActor.addAction(Actions.moveTo(posX, posY, 0.1f));
@@ -781,9 +773,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             player.addCard(card)
             val cardActor = cardActors[card]
             cardActor?.isFaceUp = (playerIndex == 0)
-            val position = (if (playerIndex == 0) playerPosition else aiPosition).clone()
-            if (playerIndex > 0 && ruleSet.playerCount > 2)
-                position[0] += ((playerIndex - 1) * offset / (ruleSet.playerCount - 2)).toFloat()
+            val position = handPosition(playerIndex)
             val delta = (if (playerIndex == 0) playerDelta else aiDelta).clone()
             val index = player.hand.size - 1
             val posX = position[0] + index * delta[0]
@@ -843,6 +833,19 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             return players[currentThrowerIndex]
         }
 
+    private fun handPosition(index: Int): FloatArray {
+        if (index == 0) return playerPosition.clone()
+        if (screenOrientationIsPortrait) return when (index) {
+            1 -> floatArrayOf(202f, 760f)
+            2 -> floatArrayOf(-10f, 650f)
+            3 -> floatArrayOf(435f, 650f)
+            else -> floatArrayOf(202f, 700f)
+        }
+        val position = aiPosition.clone()
+        if (ruleSet.playerCount > 2) position[0] += ((index - 1) * offset / (ruleSet.playerCount - 2)).toFloat()
+        return position
+    }
+
     private fun sortPlayerCards() {
         // TODO: Generalise to other players
         val player = players[0]
@@ -850,10 +853,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         // Reposition all cards
         for (i in 0 until player.hand.size) {
             val cardActor = cardActors[player.hand[i]]
-            val position = (if (player.index == 0) playerPosition else aiPosition).clone()
+            val position = handPosition(player.index)
             val delta = (if (player.index == 0) playerDelta else aiDelta).clone()
-            if (player.index > 0)
-                position[0] += ((player.index - 1) * offset / (ruleSet.playerCount - 2)).toFloat()
             val posX = position[0] + i * delta[0]
             val posY = position[1] + i * delta[1]
             cardActor?.setPosition(posX, posY)
