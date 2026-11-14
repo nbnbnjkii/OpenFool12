@@ -284,7 +284,17 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             // Opaque panel masks the lower half of the fan and blocks touches on hidden cards.
             neon.image(stage,"hud_panel",0f,0f,480f,HandFan.PANEL_TOP).touchable = Touchable.enabled
             readyButton = neon.button(stage,"ГОТОВ","green",12f,28f,177f,62f,26) {
-                flow.humanReady(); updateActionButtons()
+                if (flow.surrendered) {
+                    if (stake > game.economy.coins) {
+                        toast("Недостаточно монет для новой ставки")
+                    } else {
+                        dispose()
+                        val next=GameScreen(game,stake)
+                        game.screen=next
+                        next.flow.humanReady()
+                        next.updateActionButtons()
+                    }
+                } else { flow.humanReady(); updateActionButtons() }
             }
             doneButton = neon.button(stage,"БИТО","green",12f,28f,177f,62f,26) {
                 if (humanActions().done) {
@@ -452,6 +462,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
                 if (i > 0) {
                     val status=when {
                         flow.phase==TableFlow.Phase.WAITING || flow.phase==TableFlow.Phase.ANNOUNCING -> if (flow.ready[i]) "Готов" else "Ожидание"
+                        flow.surrendered -> "Ожидание"
                         else -> "${players[i].hand.size} карт"
                     }
                     f.draw(game.batch,status,x-12f,y-25f,90f,com.badlogic.gdx.utils.Align.center,false)
@@ -510,7 +521,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         if (confirmSurrender) drawSurrenderDialog()
         game.batch.end()
         // Check if the game is over
-        if (isGameOver) {
+        if (!flow.surrendered && isGameOver) {
             var gameResult: ResultScreen.Result = if (outOfPlay[0]) WON else LOST
             if (outOfPlay.all { it })
                 gameResult = DRAW
@@ -539,7 +550,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
 
     override fun pause() {
         skipClockFrame = true
-        if (!flow.surrendered && !wagerReleased) warnAfterResume=true
+        if (flow.needsExitWarning && !wagerReleased) warnAfterResume=true
         stage.cancelTouchFocus()
     }
 
@@ -875,10 +886,12 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
 
     fun onPlatformBack() {
         if (discardModal) { closeDiscard();return }
+        if (!flow.needsExitWarning) { leaveToMenu();return }
         if (confirmSurrender) cancelSurrender() else askSurrender()
     }
 
     private fun askSurrender() {
+        if (!flow.needsExitWarning) { leaveToMenu();return }
         if (confirmSurrender) return
         closeDiscard()
         stage.cancelTouchFocus()
@@ -907,14 +920,20 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
     }
 
     private fun acceptSurrender() {
-        if (flow.surrendered) { cancelSurrender();leaveToMenu();return }
+        if (flow.surrendered) { leaveToMenu();return }
         if (flow.surrender()) {
             // Stake was reserved on entry: finalize its loss, never subtract it a second time.
             game.economy.settleStake(-1)
             wagerReleased=true
             lastUndo=null;undoWindow=0f
             decisionSerial++
-            toast("Вы сдались. Ставка ${WagerPolicy.label(stake)} проиграна")
+            warnAfterResume=false
+            draggedCard=null
+            players.forEach { it.clearActions() }
+            cardActors.values.forEach { it.clearActions();it.isVisible=false }
+            isPlayerTaking=false
+            playerDoneStatuses.fill(false)
+            toast("Вы сдались. Партия завершена. Ставка ${WagerPolicy.label(stake)} проиграна")
         }
         cancelSurrender()
     }
@@ -1002,7 +1021,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             val f = neon.font(if (humanTurn) 25 else 18)
             f.color = if (humanTurn) Color.valueOf("73f0c1") else Color.valueOf("aebbd3")
             val text=when {
-                flow.surrendered -> "Наблюдение"
+                flow.surrendered -> "Партия завершена"
                 flow.phase==TableFlow.Phase.WAITING -> "Ждём игроков"
                 flow.phase==TableFlow.Phase.ANNOUNCING -> "Все готовы"
                 flow.phase==TableFlow.Phase.DEALING -> "Раздача карт"
@@ -1151,7 +1170,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             actor?.isVisible = visible
             actor?.touchable = if (visible) Touchable.enabled else Touchable.disabled
         }
-        show(readyButton,flow.phase==TableFlow.Phase.WAITING && !flow.ready[0] && !confirmSurrender)
+        show(readyButton,flow.showReady && !confirmSurrender)
         val tools=flow.playing && !flow.surrendered && !confirmSurrender
         show(undoButton,tools);show(discardButton,tools);show(hintButton,tools)
         show(takeButton,actions.take)

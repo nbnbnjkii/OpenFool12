@@ -27,18 +27,27 @@ class TableFlowTest {
         flow.dealt(); assertTrue(flow.playing)
         flow.tick(100f); assertTrue(flow.playing)
     }
-    @Test fun surrenderIsIdempotentAndDoesNotExitTheTable() {
-        val flow=TableFlow(2)
-        flow.humanReady();flow.tick(1f);flow.tick(1f);flow.dealt()
-        assertTrue(flow.surrender()); assertTrue(flow.playing)
-        assertTrue(flow.surrendered); assertFalse(flow.surrender())
-        assertTrue(flow.playing)
+    @Test fun surrenderEndsImmediatelyAndOffersReadyWithoutAnotherExitWarning() {
+        for (players in 2..6) {
+            val flow=TableFlow(players)
+            assertTrue(flow.showReady);assertFalse(flow.needsExitWarning)
+            flow.humanReady();assertTrue(flow.needsExitWarning)
+            flow.tick(10f);flow.tick(1f);flow.dealt()
+            assertTrue(flow.playing)
+            assertTrue(flow.surrender());assertFalse(flow.surrender())
+            assertFalse(flow.playing);assertTrue(flow.showReady)
+            assertFalse(flow.needsExitWarning)
+            flow.tick(100f);flow.dealt()
+            assertEquals(TableFlow.Phase.ENDED,flow.phase)
+            assertTrue(flow.showReady)
+        }
     }
-    @Test fun surrenderBeforeDealAutomaticallyReadiesHumanButStillWaitsForBots() {
+    @Test fun leavingBeforeReadyDoesNotNeedConfirmation() {
         val flow=TableFlow(6)
-        assertTrue(flow.surrender())
-        assertTrue(flow.ready[0]);assertEquals(TableFlow.Phase.WAITING,flow.phase)
-        flow.tick(2f);assertEquals(TableFlow.Phase.ANNOUNCING,flow.phase)
+        flow.tick(100f)
+        assertFalse(flow.needsExitWarning)
+        flow.humanReady()
+        assertTrue(flow.needsExitWarning)
     }
     @Test fun yourTurnOnlyInEmptyActionSlotAndRealHumanDecision() {
         val empty=TurnControls.Actions()
