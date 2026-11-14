@@ -104,6 +104,13 @@ class OpenFoolGame(val orientationHelper: OrientationHelper) : Game() {
     internal fun ensureDeck(style: String) { queueDeck(style); assetManager.finishLoading() }
     internal fun ensureGameAssets() { ensureDeck(preferences.getString(SettingsScreen.DECK,"rus")) }
 
+    /** Android legacy/predictive-back fallback: all table dialogs run on the GL thread. */
+    fun handleTableBack(): Boolean {
+        val table=screen as? GameScreen ?: return false
+        Gdx.app.postRunnable { if (screen===table) table.onPlatformBack() }
+        return true
+    }
+
     override fun dispose() {
         screen?.dispose()
         assetManager.dispose()

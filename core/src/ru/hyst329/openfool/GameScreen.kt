@@ -326,8 +326,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
     override fun render(delta: Float) {
         if (Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.BACK) ||
             Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.ESCAPE)) {
-            if (discardModal) { closeDiscard(); return }
-            if (confirmSurrender) cancelSurrender() else askSurrender()
+            onPlatformBack()
             return
         }
         if (warnAfterResume) { warnAfterResume=false;askSurrender() }
@@ -440,6 +439,11 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         if (screenOrientationIsPortrait) game.batch.draw(neon.texture("table"),0f,0f,480f,1000f)
         else game.batch.draw(background, 0f, 0f, 0, 0, Gdx.graphics.width, Gdx.graphics.height)
         game.batch.color = Color(Color.WHITE)
+        if (flow.phase==TableFlow.Phase.DEALING) {
+            val style=game.preferences.getString(SettingsScreen.DECK,"rus")
+            game.batch.draw(game.assetManager.get("decks/$style/back.png",Texture::class.java),
+                deckPosition[0],deckPosition[1],360f*cardScaleTable,540f*cardScaleTable)
+        }
         game.batch.end()
         // Draw stage
         if (!confirmSurrender) stage.act(delta)
@@ -918,6 +922,11 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             }
             return players[currentThrowerIndex]
         }
+
+    fun onPlatformBack() {
+        if (discardModal) { closeDiscard();return }
+        if (confirmSurrender) cancelSurrender() else askSurrender()
+    }
 
     private fun askSurrender() {
         if (confirmSurrender) return
