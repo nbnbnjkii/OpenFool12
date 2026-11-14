@@ -46,8 +46,11 @@ import kotlin.math.min
 
 private val logger = KotlinLogging.logger {}
 
-class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
+class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : Screen, EventListener {
     private val assetsReady = game.ensureGameAssets()
+    private val stakeReserved = game.economy.reserveStake(stake,RuleSet(game.preferences).playerCount)
+        .also { require(it) { "Stake exceeds wallet balance or another wager is active" } }
+    private var wagerReleased = false
     private val neon = NeonTheme()
     private val perks = GamePerks(game.economy)
     private val clock = DecisionTimer()
@@ -344,7 +347,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             }
             updateActionButtons()
             neon.button(stage,"МЕНЮ","slate",15f,932f,65f,45f,13) {
-                game.screen = MainMenuScreen(game); dispose()
+                leaveToMenu()
             }
         }
     }
@@ -357,7 +360,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         if (Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.BACK) ||
             Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.ESCAPE)) {
             if (discardModal) { closeDiscard(); return }
-            game.screen = MainMenuScreen(game); dispose(); return
+            leaveToMenu(); return
         }
         val step = if (skipClockFrame) 0f else delta.coerceAtLeast(0f)
         skipClockFrame = false
@@ -536,6 +539,12 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             var position = players.size
             val playersPlaces: Map<Int, String> = players.map { (if (places[it.index] == 0) position-- else places[it.index]) to it.name }.toMap()
 
+            game.economy.settleStake(when (gameResult) {
+                WON, TEAM_WON -> 1
+                DRAW, TEAM_DRAW -> 0
+                else -> -1
+            })
+            wagerReleased = true
             game.screen = ResultScreen(game, gameResult, playersPlaces)
             dispose()
         }
@@ -560,6 +569,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     }
 
     override fun dispose() {
+        releaseWager()
         warningSound?.dispose()
         stage.dispose()
         neon.dispose()
@@ -908,6 +918,15 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             return players[currentThrowerIndex]
         }
 
+    private fun releaseWager() {
+        if (stakeReserved && !wagerReleased) { game.economy.refundStake(); wagerReleased=true }
+    }
+    private fun leaveToMenu() {
+        releaseWager()
+        game.screen=MainMenuScreen(game)
+        dispose()
+    }
+
     private fun drawGameHud() {
         val batch = game.batch
         val mode = if (ruleSet.allowPass) "ПЕРЕВОДНОЙ" else "ПОДКИДНОЙ"
@@ -915,8 +934,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         neon.font(18).draw(batch,mode,90f,973f,235f,com.badlogic.gdx.utils.Align.center,false)
         batch.draw(neon.texture(if (ruleSet.allowPass) "mode_pass" else "mode_throw"),191f,923f,35f,35f)
         neon.font(16).color = Color.WHITE
-        // Bot games have no wager accounting yet. Never show a fictional paid stake.
-        neon.font(16).draw(batch,"Ставка: 0",330f,968f,113f,com.badlogic.gdx.utils.Align.right,false)
+        // The displayed stake is the actual amount reserved from the local wallet.
+        neon.font(16).draw(batch,"Ставка: ${WagerPolicy.label(stake)}",320f,968f,123f,com.badlogic.gdx.utils.Align.right,false)
         batch.draw(neon.texture("coin"),450f,950f,21f,21f)
 
         val actions = humanActions()

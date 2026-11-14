@@ -11,7 +11,7 @@ import com.badlogic.gdx.scenes.scene2d.ui.Label
 import com.badlogic.gdx.utils.viewport.FitViewport
 
 /** Persistent, explicit bot-game options; the human is included in the player count. */
-internal class BotSetupScreen(private val game: OpenFoolGame) : Screen {
+internal class BotSetupScreen(private val game: OpenFoolGame, private val matchMode: MatchMode = MatchMode.BOTS) : Screen {
     private val stage = Stage(FitViewport(480f, 1000f))
     private val theme = NeonTheme()
     private val rules = RuleSet(game.preferences)
@@ -19,13 +19,13 @@ internal class BotSetupScreen(private val game: OpenFoolGame) : Screen {
     private val decks = HashMap<Int, Actor>()
     private val modes = HashMap<Boolean, Actor>()
     private lateinit var notice: Label
-    private val summary: Label
+    private val wager: WagerSlider
     init {
         Gdx.input.inputProcessor = stage
         game.orientationHelper.requestOrientation(OrientationHelper.Orientation.PORTRAIT)
         theme.image(stage,"lobby",0f,0f,480f,1000f)
         theme.button(stage,"НАЗАД","slate",20f,924f,110f,48f,18) { back() }
-        theme.label(stage,"ИГРА С БОТАМИ",20f,834f,440f,60f,31)
+        theme.label(stage,when (matchMode) { MatchMode.BOTS -> "ИГРА С БОТАМИ"; MatchMode.ONLINE -> "ИГРАТЬ ОНЛАЙН"; MatchMode.FRIENDS -> "ИГРА С ДРУГОМ" },20f,834f,440f,60f,28)
         theme.label(stage,"Участников за столом (включая вас)",20f,765f,440f,40f,20)
         for (count in 2..6) {
             counts[count] = theme.button(stage,"$count","purple",20f+(count-2)*90f,679f,80f,70f,30) {
@@ -56,15 +56,21 @@ internal class BotSetupScreen(private val game: OpenFoolGame) : Screen {
                 rules.allowPass = pass; refresh()
             }
         }
-        val help = theme.label(stage,"Тяните карту на стол: сначала отбой, иначе перевод картой того же ранга.\nПереводить можно только до начала отбоя.",25f,238f,430f,85f,17,Color.valueOf("b6c0dc"))
-        help.setWrap(true)
-        notice = theme.label(stage,"",20f,184f,440f,45f,16,Color.valueOf("ffcf71"))
-        summary = theme.label(stage,"",20f,131f,440f,40f,18,Color.valueOf("83f5c5"))
-        theme.button(stage,"НАЧАТЬ ИГРУ","green",25f,32f,430f,86f,28) {
-            game.preferences.putBoolean(SettingsScreen.ORIENTATION,true).flush()
-            rules.teamPlay = false
-            rules.save(game.preferences)
-            game.screen = GameScreen(game); dispose()
+        wager = WagerSlider(theme,{ game.economy.coins },game.preferences.getInteger("Game/Stake",250))
+        wager.setBounds(20f,175f,440f,155f); stage.addActor(wager)
+        notice = theme.label(stage,if (matchMode == MatchMode.BOTS) "Ставка спишется при старте. Выход возвращает ставку." else "Настройки доступны; сетевой режим пока не подключён.",20f,126f,440f,43f,14,Color.valueOf("ffcf71"))
+        notice.setWrap(true)
+        val caption=when (matchMode) { MatchMode.BOTS -> "НАЧАТЬ ИГРУ"; MatchMode.ONLINE -> "НАЙТИ ИГРУ"; MatchMode.FRIENDS -> "СОЗДАТЬ КОМНАТУ" }
+        theme.button(stage,caption,"green",25f,32f,430f,86f,26) {
+            val amount=WagerPolicy.clamp(wager.amount,game.economy.coins)
+            game.preferences.putInteger("Game/Stake",amount).flush()
+            if (matchMode != MatchMode.BOTS) {
+                notice.setText("Ставка сохранена. Сетевые игры пока недоступны; монеты не списаны.")
+            } else {
+                game.preferences.putBoolean(SettingsScreen.ORIENTATION,true).flush()
+                rules.teamPlay=false;rules.save(game.preferences)
+                game.screen=GameScreen(game,amount);dispose()
+            }
         }
         refresh()
     }
@@ -75,7 +81,6 @@ internal class BotSetupScreen(private val game: OpenFoolGame) : Screen {
         counts.forEach { (n,a) -> highlight(a,n == rules.playerCount) }
         decks.forEach { (n,a) -> highlight(a,n == rules.cardCount) }
         modes.forEach { (pass,a) -> highlight(a,pass == rules.allowPass) }
-        summary.setText("Вы + ${rules.playerCount-1} ботов  •  ${rules.cardCount} карты")
     }
     private fun back() { game.screen = MainMenuScreen(game); dispose() }
     override fun render(delta: Float) {

@@ -5,57 +5,105 @@ import com.badlogic.gdx.Input
 import com.badlogic.gdx.Screen
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.GL20
+import com.badlogic.gdx.scenes.scene2d.Actor
+import com.badlogic.gdx.scenes.scene2d.Group
 import com.badlogic.gdx.scenes.scene2d.Stage
 import com.badlogic.gdx.scenes.scene2d.ui.Label
+import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.viewport.FitViewport
 
-/** Portrait lobby. Unimplemented network features are explicitly labelled, never simulated. */
+/** Reference-inspired lobby; unavailable network/social features never simulate live services. */
 internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
-    private val stage = Stage(FitViewport(480f, 1000f))
-    private val theme = NeonTheme()
-    private val status: Label
-    private var message = ""
+    private val stage=Stage(FitViewport(480f,1000f))
+    private val theme=NeonTheme()
+    private val home=Group()
+    private val tabs=ArrayList<Pair<Actor,Label>>()
+    private lateinit var sectionTitle: Label
+    private lateinit var sectionText: Label
+    private lateinit var friendAction: Actor
+    private lateinit var status: Label
+    private var selectedTab=0
+    private var message=""
     init {
-        Gdx.input.inputProcessor = stage
+        Gdx.input.inputProcessor=stage
         game.orientationHelper.requestOrientation(OrientationHelper.Orientation.PORTRAIT)
         theme.image(stage,"lobby",0f,0f,480f,1000f)
-        theme.image(stage,"avatar",20f,892f,78f,78f)
-        theme.label(stage,"Игрок_1",110f,925f,180f,40f,27)
-        theme.label(stage,"${game.economy.coins} монет  •  ${game.economy.crystals} кристаллов",107f,892f,244f,28f,16,Color.valueOf("a9b2d0"))
-        theme.button(stage,"...","slate",420f,914f,42f,42f,24) { settings() }
-        theme.image(stage,"banner",20f,677f,440f,186f)
-        status = theme.label(stage,"",20f,628f,440f,32f,17,Color.valueOf("9fa9c4"))
-        theme.button(stage,"ИГРАТЬ ОНЛАЙН","green",20f,495f,440f,102f,29) {
-            message = "Онлайн-режим пока в разработке"
+        theme.image(stage,"avatar",20f,895f,78f,78f)
+        theme.image(stage,"ui_chip",47f,888f,27f,24f)
+        theme.label(stage,"1",47f,888f,27f,24f,14,Color.valueOf("6cf39a"))
+        theme.label(stage,"Игрок_1",110f,937f,250f,39f,28).setAlignment(Align.left)
+        theme.image(stage,"ui_chip",110f,902f,106f,29f)
+        theme.image(stage,"coin",116f,907f,20f,20f)
+        theme.label(stage,"${game.economy.coins}",139f,903f,54f,27f,16,Color.valueOf("ffdc68"))
+        theme.iconButton(stage,"ui_plus",196f,909f,15f) { selectTab(1) }
+        theme.image(stage,"ui_chip",225f,902f,111f,29f)
+        theme.image(stage,"crystal",231f,907f,20f,20f)
+        theme.label(stage,"${game.economy.crystals}",254f,903f,48f,27f,16,Color.valueOf("7cdbff"))
+        theme.iconButton(stage,"ui_plus",315f,909f,15f) { selectTab(1) }
+        theme.iconButton(stage,"ui_gear",423f,929f,35f) {
+            game.screen=SettingsScreen(game);dispose()
         }
-        theme.button(stage,"ИГРАТЬ С ДРУЗЬЯМИ","purple",20f,374f,440f,96f,24) {
-            message = "Игра по сети пока недоступна"
+        val first=stage.actors.size
+        theme.image(stage,"banner",20f,690f,440f,186f)
+        theme.label(stage,"• Игра с ботами",20f,646f,170f,29f,15,Color.valueOf("8f9bb6")).setAlignment(Align.left)
+        theme.label(stage,"•  •  •",201f,648f,73f,25f,18,Color.valueOf("7f8ba5"))
+        theme.label(stage,"Уведомления",310f,646f,120f,29f,14,Color.valueOf("8f9bb6"))
+        theme.iconButton(stage,"ui_bell",436f,649f,23f) { message="Новых уведомлений нет" }
+        status=theme.label(stage,"",20f,612f,440f,24f,14,Color.valueOf("c5d4eb"))
+        theme.menuButton(stage,"ИГРАТЬ ОНЛАЙН","green","ui_planet",20f,501f,440f,98f,27) { setup(MatchMode.ONLINE) }
+        theme.menuButton(stage,"ИГРАТЬ С ДРУЗЬЯМИ","purple","ui_friends",20f,386f,440f,92f,23) { setup(MatchMode.FRIENDS) }
+        theme.menuButton(stage,"ПРОТИВ БОТА","bot_button","ui_robot",20f,271f,440f,92f,27) { setup(MatchMode.BOTS) }
+        theme.menuButton(stage,"ТУРНИРЫ","slate","ui_trophy",20f,156f,440f,92f,28) { message="Турниры пока недоступны" }
+        theme.image(stage,"ui_badge",92f,232f,81f,26f)
+        theme.label(stage,"СКОРО",92f,232f,81f,26f,14)
+        // Move only the home content into a switchable group; profile and navigation remain fixed.
+        val actors=(first until stage.actors.size).map { stage.actors[it] }
+        actors.forEach { home.addActor(it) };stage.addActor(home)
+        sectionTitle=theme.label(stage,"",25f,699f,430f,70f,32)
+        sectionText=theme.label(stage,"",35f,430f,410f,220f,22,Color.valueOf("aab8d2"))
+        sectionText.setWrap(true)
+        friendAction=theme.button(stage,"СОЗДАТЬ ИГРУ","purple",25f,300f,430f,82f,25) { setup(MatchMode.FRIENDS) }
+        theme.image(stage,"hud_panel",0f,0f,480f,100f)
+        val names=listOf("Главная","Магазин","Друзья","Задания","Лидеры")
+        val icons=listOf("ui_home","ui_shop","ui_friends","ui_tasks","ui_trophy")
+        for (i in names.indices) {
+            val icon=theme.iconButton(stage,icons[i],i*96f+29f,48f,38f) { selectTab(i) }
+            val label=theme.label(stage,names[i],i*96f,16f,96f,29f,15)
+            label.addListener(object : com.badlogic.gdx.scenes.scene2d.utils.ClickListener() {
+                override fun clicked(event: com.badlogic.gdx.scenes.scene2d.InputEvent?,x: Float,y: Float) { selectTab(i) }
+            })
+            tabs.add(icon to label)
         }
-        theme.button(stage,"ПРОТИВ БОТА","blue",20f,252f,440f,96f,29) { choosePlayers() }
-        theme.button(stage,"ТУРНИРЫ  •  СКОРО","slate",20f,132f,440f,94f,25) {
-            message = "Турниры появятся в следующих версиях"
-        }
-        theme.label(stage,"ГЛАВНАЯ",14f,25f,130f,40f,19,Color.valueOf("49e38a"))
-        theme.button(stage,"ПРАВИЛА","slate",166f,25f,144f,44f,17) {
-            message = "Тяните карту на стол для хода или на карту соперника для отбоя."
-        }
-        theme.button(stage,"НАСТРОЙКИ","slate",323f,25f,143f,44f,16) { settings() }
+        selectTab(0)
     }
-    private fun settings() { game.screen = SettingsScreen(game); dispose() }
-    private fun choosePlayers() {
-        game.screen = BotSetupScreen(game)
-        dispose()
+    private fun setup(mode: MatchMode) { game.screen=BotSetupScreen(game,mode);dispose() }
+    private fun selectTab(index: Int) {
+        selectedTab=index
+        home.isVisible=index==0
+        sectionTitle.isVisible=index!=0; sectionText.isVisible=index!=0
+        friendAction.isVisible=index==2
+        val titles=listOf("","МАГАЗИН","ДРУЗЬЯ","ЗАДАНИЯ","ЛИДЕРЫ")
+        val descriptions=listOf("", "${game.economy.coins} монет • ${game.economy.crystals} кристаллов\n\nПокупки и пополнение пока недоступны.",
+            "Настройте ставку и правила игры с другом.\n\nСетевые комнаты и приглашения пока не реализованы.",
+            "Задания и награды появятся в следующем обновлении.",
+            "Таблица лидеров пока недоступна. Онлайн-рейтинг не подключён.")
+        sectionTitle.setText(titles[index]);sectionText.setText(descriptions[index])
+        tabs.forEachIndexed { i,(icon,label) ->
+            val c=if (i==index) Color.valueOf("4ee68a") else Color.valueOf("919bb9")
+            icon.color=c;label.color=c
+        }
     }
     override fun render(delta: Float) {
         game.assetManager.update(3)
         status.setText(message)
-        status.setFontScale(if (message.length > 48) 0.7f else 1f)
-        Gdx.gl.glClearColor(0.07f,0.08f,0.17f,1f); Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
-        stage.act(delta); stage.draw()
-        if (Gdx.input.isKeyJustPressed(Input.Keys.BACK) || Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) Gdx.app.exit()
+        Gdx.gl.glClearColor(0.07f,0.08f,0.17f,1f);Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
+        stage.act(delta);stage.draw()
+        if (Gdx.input.isKeyJustPressed(Input.Keys.BACK) || Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            if (selectedTab!=0) selectTab(0) else Gdx.app.exit()
+        }
     }
     override fun resize(width: Int,height: Int) { stage.viewport.update(width,height,true) }
-    override fun dispose() { stage.dispose(); theme.dispose() }
+    override fun dispose() { stage.dispose();theme.dispose() }
     override fun show() {}
     override fun hide() {}
     override fun pause() {}

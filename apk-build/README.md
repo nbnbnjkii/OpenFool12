@@ -146,3 +146,33 @@ shows “Ваш ход”; a bot decision never displays that message.
 The top row shows the actual passing/throw-in rule selection and its icon, plus
 “Ставка: 0”. Bot games do not yet implement wager selection or coin settlements,
 so this display does not fabricate a stake or silently debit the wallet.
+
+## Lobby navigation and real local stakes (0.8.0)
+
+The lobby follows the reference's composition: profile and currency chips with
+plus controls, settings gear, card banner, icon-bearing green/purple/orange-blue
+buttons, trophy control with a soon badge, and five persistent bottom tabs.
+Shop/tasks/leaders and notifications honestly describe their unavailable state.
+No fabricated online population, paid top-ups, active tournament, or ranking is
+shown. Friends links to the friend-game configuration.
+
+All three entry points (bots, online, friends) share the same setup and wager
+slider. The 100 / 1K / 10K / 100K / 1M / 10M logarithmic ticks remain visible;
+values beyond the wallet are gray and unreachable. Default stake is 250, saved
+values and drag input are clamped to min(wallet,10M). At a zero balance, zero-
+stake bot practice remains available.
+
+Bot stakes are real local virtual-coin entries, not a decorative header value:
+reserved once at entry; a loss consumes the reservation; a draw refunds it; a
+win pays the original stake plus stake/(players-1), rounded down, matching a
+shared losing player's stake among the remaining players. Exiting unfinished
+play or recovering an interrupted app refunds escrow once. Crystals are separate.
+The live selected stake replaces the previous fixed-zero game-header value.
+
+Online and friend configuration save the wager but never debit coins or pretend
+to connect: transport/server/rooms remain unimplemented. Replay returns to setup
+so the next stake is checked against the newly settled balance.
+
+Tests cover all scale ticks, monotonically clamped drag input, low/zero balances,
+reservation limits, duplicate starts, 2–6-player settlements, and exactly-once
+refund/recovery. These remain debug/local balances, not real-money gambling.

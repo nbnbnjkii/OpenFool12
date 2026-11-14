@@ -74,6 +74,23 @@ internal class NeonTheme : Disposable {
         })
         stage.addActor(actor); return actor
     }
+    fun menuButton(stage: Stage,text: String,background: String,icon: String,x: Float,y: Float,
+                   w: Float,h: Float,size: Int,action: () -> Unit): Actor {
+        val actor=object : Actor() {
+            override fun draw(batch: Batch,parentAlpha: Float) {
+                batch.color=Color.WHITE
+                batch.draw(texture(background),x,y,width,height)
+                batch.draw(texture(icon),x+24f,y+(height-52f)/2f,52f,52f)
+                font(size).color=Color.WHITE
+                font(size).draw(batch,text,x+90f,y+height/2+size/2,width-105f,Align.center,false)
+            }
+        }
+        actor.setBounds(x,y,w,h)
+        actor.addListener(object : ClickListener() {
+            override fun clicked(event: InputEvent?,x: Float,y: Float) { action() }
+        })
+        stage.addActor(actor);return actor
+    }
     fun iconButton(stage: Stage, name: String, x: Float,y: Float,size: Float,action: () -> Unit): Actor {
         val icon = image(stage,name,x,y,size,size)
         icon.addListener(object : ClickListener() {

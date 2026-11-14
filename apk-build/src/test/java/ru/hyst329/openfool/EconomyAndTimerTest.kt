@@ -74,4 +74,42 @@ class EconomyAndTimerTest {
         assertEquals(20f,timer.remaining,0.001f)
         assertEquals(0,timer.owner)
     }
+    @Test fun cannotReserveMoreThanCoinsOrReserveTwice() {
+        val wallet=GameEconomy(preferences())
+        assertFalse(wallet.reserveStake(10001,2)); assertFalse(wallet.reserveStake(-1,2))
+        assertEquals(10000,wallet.coins)
+        assertTrue(wallet.reserveStake(250,2)); assertEquals(9750,wallet.coins)
+        assertFalse(wallet.reserveStake(250,2)); assertEquals(9750,wallet.coins)
+        assertEquals(20,wallet.crystals)
+    }
+    @Test fun stakesSettleOnceForWinLossAndDraw() {
+        for (players in 2..6) {
+            for (outcome in -1..1) {
+                val wallet=GameEconomy(preferences())
+                assertTrue(wallet.reserveStake(250,players))
+                val expected=when { outcome>0 -> 250+250/(players-1); outcome==0 -> 250; else -> 0 }
+                assertEquals(expected,wallet.settleStake(outcome))
+                assertEquals(9750+expected,wallet.coins)
+                assertEquals(0,wallet.settleStake(outcome));assertEquals(0,wallet.refundStake())
+                assertEquals(9750+expected,wallet.coins)
+            }
+        }
+    }
+    @Test fun exitAndInterruptedAppReturnOnlyTheReservedStake() {
+        val prefs=preferences();val wallet=GameEconomy(prefs)
+        assertTrue(wallet.reserveStake(500,6))
+        val reopened=GameEconomy(prefs)
+        assertEquals(10000,reopened.coins);assertEquals(0,reopened.activeStake)
+        assertEquals(10000,GameEconomy(prefs).coins)
+        assertTrue(reopened.reserveStake(1000,2));assertEquals(1000,reopened.refundStake())
+        assertEquals(10000,reopened.coins)
+    }
+    @Test fun zeroBalanceStillAllowsFreePracticeButNoPaidStake() {
+        val wallet=GameEconomy(preferences())
+        assertTrue(wallet.reserveStake(10000,2));wallet.settleStake(-1)
+        assertEquals(0,wallet.coins)
+        assertFalse(wallet.reserveStake(1,2));assertTrue(wallet.reserveStake(0,2))
+        assertEquals(0,wallet.coins)
+    }
+
 }
