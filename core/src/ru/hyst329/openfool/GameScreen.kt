@@ -1016,9 +1016,6 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             // Center the count ON the back of the pile, not above it.
             val cx=deckPosition[0]+180f*cardScaleTable
             val cy=deckPosition[1]+270f*cardScaleTable
-            batch.color=Color(0f,0f,0f,0.65f)
-            batch.draw(neon.texture("pixel"),cx-29f,cy-20f,58f,40f)
-            batch.color=Color.WHITE
             neon.font(30).color = Color.WHITE
             neon.font(30).draw(batch,"${cardsRemaining()}",cx-36f,cy+16f,72f,com.badlogic.gdx.utils.Align.center,false)
         }
