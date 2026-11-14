@@ -289,7 +289,6 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             doneButton = neon.button(stage,"БИТО","green",12f,28f,177f,62f,26) {
                 if (humanActions().done) {
                     currentThrower.sayDone()
-                    gameState = FINISHED
                 }
                 updateActionButtons()
             }
@@ -301,7 +300,6 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             giveButton = neon.button(stage,"ОТДАТЬ","green",12f,28f,177f,62f,24) {
                 if (humanActions().give) {
                     currentThrower.sayDone()
-                    gameState = FINISHED
                 }
                 updateActionButtons()
             }
@@ -352,15 +350,9 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         if (tick.timeout) onDecisionTimeout()
         Gdx.gl.glClearColor(backgroundColor.r, backgroundColor.g, backgroundColor.b, backgroundColor.a)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
-        val opponents =
-                when {
-                    ruleSet.teamPlay -> (if (outOfPlay[currentAttackerIndex]) 0 else 1) + if (outOfPlay[(currentAttackerIndex + 2) % ruleSet.playerCount]) 0 else 1
-                    (outOfPlay.map { if (it) 0 else 1 }.fold(initial = 0) { total, current -> total + current }) > 2 -> 2
-                    else -> 1
-                }
-        if (playersSaidDone == opponents && gameState != DRAWING
-                && gameState != BEATING && gameState != THROWING) {
-            logger.debug("Done - all players said done!")
+        val eligibleThrowers = SeatOrder.throwers(currentAttacker.index,currentDefender.index,outOfPlay,ruleSet.teamPlay)
+        if (flow.playing && eligibleThrowers.isNotEmpty() && eligibleThrowers.all { playerDoneStatuses[it] }
+                && gameState != DRAWING && gameState != BEATING && gameState != THROWING) {
             gameState = FINISHED
         }
         if (oldGameState != gameState) {
@@ -400,8 +392,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
                 if (limitReached && !waitingForHuman) {
                     gameState = FINISHED
                 } else if (currentThrower.index != 0 || flow.surrendered) {
-                    if (limitReached || TurnControls.botFinishesDefendedHumanTurn(
-                            currentDefender.index == 0, attackCards.count { it != null }, defenseCards.count { it != null })) {
+                    if (limitReached) {
                         currentThrower.sayDone()
                     } else {
                         currentThrower.throwOrDone(attackCards, defenseCards, trumpSuit, cardsRemaining(), players.map { it.hand.size }.toTypedArray())
@@ -415,17 +406,8 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
                 if (isGameOver) {
                     logger.debug("GAME OVER")
                 } else {
-                    currentAttackerIndex += if (playerTook) 2 else 1
-                    currentAttackerIndex %= ruleSet.playerCount
-                    if (!ruleSet.teamPlay)
-                    // Defender who took cannot attack anyway!
-                        while (outOfPlay[currentAttackerIndex] ||
-                                (playerTook && currentAttackerIndex == currentDefenderIndex)) {
-                            currentAttackerIndex++
-                            if (currentAttackerIndex == ruleSet.playerCount)
-                                currentAttackerIndex = 0
-                            if (isGameOver) break
-                        }
+                    currentAttackerIndex = if (playerTook || outOfPlay[currentDefenderIndex])
+                        SeatOrder.next(currentDefenderIndex,outOfPlay) else currentDefenderIndex
                     currentThrowerIndex = currentAttackerIndex
                     logger.debug("${currentAttacker.name} (${currentAttacker.index}) -> ${currentDefender.name} (${currentDefender.index})")
                 }
@@ -458,8 +440,9 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         game.batch.begin()
         if (screenOrientationIsPortrait) {
             for (i in players.indices) {
-                val x = when (i) { 0 -> 210f; 1 -> 205f; 2, 4 -> 20f; else -> 395f }
-                val y = when (i) { 0 -> 25f; 1 -> 825f; 2, 3 -> 635f; else -> 370f }
+                val seat = SeatOrder.portraitSeat(i,players.size)
+                val x = seat[0]
+                val y = seat[1]
                 val size = if (i == 0) 66f else 64f
                 game.batch.draw(neon.texture(if (i == 0) "avatar" else "bot"),x,y,size,size)
                 if (decisionOwner() == i) neon.timerRing(game.batch,x+size/2,y+size/2,size/2+7f,clock.remaining)
@@ -481,7 +464,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             drawGameHud()
             if (messageSeconds > 0f) neon.font(14).draw(game.batch,message,15f,276f,450f,com.badlogic.gdx.utils.Align.center,true)
             else if (undoWindow > 0f) neon.font(14).draw(game.batch,"Возврат карты: 2 кристалла (${kotlin.math.ceil(undoWindow).toInt()} с)",15f,276f,450f,com.badlogic.gdx.utils.Align.center,false)
-            neon.font(20).draw(game.batch,"${cardsRemaining()}",388f,778f)
+
             if (flow.phase==TableFlow.Phase.ANNOUNCING || flow.phase==TableFlow.Phase.DEALING) {
                 neon.font(26).color=Color.WHITE
                 neon.font(26).draw(game.batch,if (flow.phase==TableFlow.Phase.ANNOUNCING) "Все готовы!" else "Раздача карт...",0f,480f,480f,com.badlogic.gdx.utils.Align.center,false)
@@ -532,8 +515,8 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             if (outOfPlay.all { it })
                 gameResult = DRAW
             if (ruleSet.teamPlay) gameResult = if (outOfPlay[0]) TEAM_WON else TEAM_LOST
-            if (ruleSet.teamPlay && outOfPlay[1] && outOfPlay[3] && gameResult == TEAM_WON)
-                gameResult = if (outOfPlay[2]) TEAM_DRAW else TEAM_PARTNER_LOST
+            if (ruleSet.teamPlay && (1 until players.size step 2).all { outOfPlay[it] } && gameResult == TEAM_WON)
+                gameResult = if ((0 until players.size step 2).all { outOfPlay[it] }) TEAM_DRAW else TEAM_PARTNER_LOST
             var position = players.size
             val playersPlaces: Map<Int, String> = players.map { (if (places[it.index] == 0) position-- else places[it.index]) to it.name }.toMap()
 
@@ -628,7 +611,9 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             ))
         }
         if (deck.cards?.isEmpty() == false) {
-            for (i in 0 until ruleSet.playerCount) {
+            val refill = (0 until players.size).map { (currentAttacker.index+it)%players.size }
+                .filter { it != currentDefender.index } + currentDefender.index
+            for (i in refill) {
                 val cardsToDraw = DEAL_LIMIT - players[i].hand.size
                 if (cardsToDraw > 0) {
                     drawCardsToPlayer(i, cardsToDraw)
@@ -655,7 +640,8 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
     val isGameOver: Boolean
         get() {
             if (ruleSet.teamPlay)
-                return outOfPlay[0] && outOfPlay[2] || outOfPlay[1] && outOfPlay[3]
+                return (0 until players.size step 2).all { outOfPlay[it] } ||
+                    (1 until players.size step 2).all { outOfPlay[it] }
             else {
                 // Simply check if only one player remains
                 return (outOfPlay.map { if (it) 0 else 1 }.fold(initial = 0) { total, current -> total + current }) <= 1
@@ -828,13 +814,9 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
             val player = event.getTarget() as Player
             if (playerDoneStatuses[player.index]) return true
             playersSaidDone++
-            if (!ruleSet.teamPlay) {
-                currentThrowerIndex = if (player.index == currentAttacker.index)
-                    nextDefender.index else currentAttacker.index
-            } else {
-                currentThrowerIndex = (currentThrowerIndex + 2) % ruleSet.playerCount
-            }
             playerDoneStatuses[player.index] = true
+            currentThrowerIndex = SeatOrder.nextThrower(player.index,currentAttacker.index,
+                currentDefender.index,outOfPlay,playerDoneStatuses,ruleSet.teamPlay) ?: player.index
             logger.debug("${player.name} (${player.index}) says done\n")
             return true
         }
@@ -877,51 +859,19 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
     }
 
     private val currentAttacker: Player
-        get() {
-            if (outOfPlay[currentAttackerIndex]) {
-                return players[(currentAttackerIndex + 2) % ruleSet.playerCount]
-            }
-            return players[currentAttackerIndex]
-        }
+        get() = players[if (!outOfPlay[currentAttackerIndex]) currentAttackerIndex else
+            SeatOrder.next(currentAttackerIndex,outOfPlay)]
 
     private val currentDefender: Player
-        get() {
-            var currentDefenderIndex = (currentAttackerIndex + 1) % ruleSet.playerCount
-            if (!ruleSet.teamPlay)
-                while (outOfPlay[currentDefenderIndex]) {
-                    currentDefenderIndex++
-                    if (currentDefenderIndex == ruleSet.playerCount)
-                        currentDefenderIndex = 0
-                }
-            else if (outOfPlay[currentDefenderIndex]) {
-                return players[(currentDefenderIndex + 2) % ruleSet.playerCount]
-            }
-            return players[currentDefenderIndex]
-        }
+        get() = players[SeatOrder.next(currentAttacker.index,outOfPlay)]
 
     private val nextDefender: Player
-        get() {
-            var nextDefenderIndex = (currentDefender.index + 1) % ruleSet.playerCount
-            if (!ruleSet.teamPlay)
-                while (outOfPlay[nextDefenderIndex]) {
-                    nextDefenderIndex++
-                    if (nextDefenderIndex == ruleSet.playerCount)
-                        nextDefenderIndex = 0
-                }
-            else if (outOfPlay[nextDefenderIndex]) {
-                return players[(nextDefenderIndex + 2) % ruleSet.playerCount]
-            }
-            return players[nextDefenderIndex]
-        }
-
+        get() = players[SeatOrder.next(currentDefender.index,outOfPlay)]
 
     private val currentThrower: Player
-        get() {
-            if (outOfPlay[currentThrowerIndex]) {
-                return players[(currentThrowerIndex + 2) % ruleSet.playerCount]
-            }
-            return players[currentThrowerIndex]
-        }
+        get() = players[if (!outOfPlay[currentThrowerIndex]) currentThrowerIndex else
+            SeatOrder.nextThrower(currentThrowerIndex,currentAttacker.index,currentDefender.index,
+                outOfPlay,playerDoneStatuses,ruleSet.teamPlay) ?: currentAttacker.index]
 
     fun onPlatformBack() {
         if (discardModal) { closeDiscard();return }
@@ -1034,6 +984,14 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         // The displayed stake is the actual amount reserved from the local wallet.
         neon.font(16).draw(batch,"Ставка: ${WagerPolicy.label(stake)}",320f,968f,123f,com.badlogic.gdx.utils.Align.right,false)
         batch.draw(neon.texture("coin"),450f,950f,21f,21f)
+        val suit = suitSymbols[trumpSuit]
+        suit?.setBounds(400f,872f,28f,28f)
+        suit?.setScale(1f)
+        suit?.draw(batch)
+        neon.font(15).color = Color.WHITE
+        neon.font(15).draw(batch,"Козырь",391f,925f)
+        neon.font(16).draw(batch,"${cardsRemaining()} карт",326f,835f,130f,com.badlogic.gdx.utils.Align.center,false)
+
 
         val actions = humanActions()
         val hasAction = actions.take || actions.done || actions.give
@@ -1086,7 +1044,6 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         if (gameState == THROWN && !isPlayerTaking) player.sayTake()
         else if (attackCards.any { it != null }) {
             player.sayDone()
-            if (owner == 0) gameState = FINISHED
         } else {
             player.startTurn(trumpSuit,cardsRemaining(),players.map { it.hand.size }.toTypedArray())
         }
@@ -1261,12 +1218,9 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
 
     private fun handPosition(index: Int): FloatArray {
         if (index == 0) return playerPosition.clone()
-        if (screenOrientationIsPortrait) return when (index) {
-            1 -> floatArrayOf(202f, 760f)
-            2 -> floatArrayOf(-10f, 720f)
-            3 -> floatArrayOf(425f, 720f)
-            4 -> floatArrayOf(-10f, 455f)
-            else -> floatArrayOf(425f, 455f)
+        if (screenOrientationIsPortrait) {
+            val seat=SeatOrder.portraitSeat(index,players.size)
+            return floatArrayOf(if (seat[0]<100f) -10f else if (seat[0]>300f) 425f else 202f,seat[1]-65f)
         }
         val position = aiPosition.clone()
         if (ruleSet.playerCount > 2) position[0] += ((index - 1) * offset / (ruleSet.playerCount - 2)).toFloat()
@@ -1327,7 +1281,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         private const val HH_AI_PORTRAIT = CARD_SCALE_AI_PORTRAIT * 270
         private const val HH_PLAYER_PORTRAIT = CARD_SCALE_PLAYER_PORTRAIT * 270
 
-        private val DECK_POSITION_PORTRAIT = floatArrayOf(410 - HW_TABLE_PORTRAIT, 735 - HH_TABLE_PORTRAIT)
+        private val DECK_POSITION_PORTRAIT = floatArrayOf(332f, 844f)
         private val DISCARD_PILE_POSITION_PORTRAIT = floatArrayOf(435 - HW_TABLE_PORTRAIT, 400 - HH_TABLE_PORTRAIT)
         private val PLAYER_POSITION_PORTRAIT = floatArrayOf(90 - HW_PLAYER_PORTRAIT, 195 - HH_PLAYER_PORTRAIT)
         private val AI_POSITION_PORTRAIT = floatArrayOf(40 - HW_AI_PORTRAIT, 800 - HH_AI_PORTRAIT)
