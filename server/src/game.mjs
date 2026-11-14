@@ -124,7 +124,7 @@ export class Room {
   }
   surrender(id) {
     const p=this.players[this.seat(id)];if(p.surrendered)return;
-    check(this.phase==='playing','Партия не идёт');
+    check(this.phase==='playing','Партия не идёт');check(!p.out,'Вы уже закончили игру');
     this.undo=null;
     p.surrendered=true;p.out=true;this.discard.push(...p.hand);p.hand=[];
     // Current round is settled safely before continuing with the remaining live seats.
@@ -139,7 +139,7 @@ export class Room {
   }
   leave(id) {
     const i=this.seat(id);
-    if(this.phase==='playing')this.surrender(id);
+    if(this.phase==='playing'){if(!this.players[i].out)this.surrender(id);}
     else {this.players.splice(i,1);if(this.owner===id)this.owner=this.players.find(p=>!p.bot)?.id??null;this.touch();}
   }
   botAction() {

@@ -1,264 +1,179 @@
-# Android: Neon edition
+# OpenFool — сервер игры с друзьями
 
-The standalone build uses JDK 17, Gradle 8.7 and Android SDK 35. It does not
-configure the obsolete iOS/Graal plugins from the original root build.
+**Обновление 0.11.1:** адрес APK теперь `https://46.30.41.204/v1`.
+Для текущей установки без домена следуйте **[IP-HTTPS.md](IP-HTTPS.md)**.
+Ниже сохранён альтернативный способ с доменом для старых версий/других сборок.
 
-```sh
-# Set ANDROID_HOME to an SDK installation, or write apk-build/local.properties.
-gradle -p apk-build testDebugUnitTest assembleDebug
+Это исходники сервера и инструкция, **не отчёт об установке на VPS**. Из среды
+разработки соединение с `vm670328.eurodir.ru` не проверялось.
+
+## Что реализовано
+
+- Регистрация по уникальному логину, вход, выход. Пароли — scrypt + индивидуальная
+  соль; сервер хранит SHA-256 хеши случайных токенов сессии, не сами токены.
+- Сессия живёт 30 дней. Телефон сохраняет только токен в приватных настройках
+  приложения, но не пароль. После истечения срока требуется вход, не новая регистрация.
+- Комнаты с четырёхзначным кодом, до 6 мест. Код выдаёт сервер с проверкой коллизий.
+  По умолчанию ботов **ноль**. При создании можно выбрать галочку и 0–4 бота,
+  но всегда остаётся минимум 2 места людям. Для запуска нужны 2 живых игрока.
+- Участники нажимают «Готов», создатель — «Начать»; не обязательно заполнять все места.
+- Серверная раздача, скрытые чужие руки, проверка ходов, защита, перевод, подкидывание
+  по часовой стрелке, добор, таймер 30 секунд. Боты существуют только на сервере и
+  не создаются вместо отключившихся людей. По тайм-ауту производится безопасный ход.
+- Запросы в друзья после нажатия на живого игрока за столом; получатель принимает
+  запрос в меню «Друзья». За столом можно выбрать друга и пригласить его; в меню
+  друга появляется «Да / Нет». Приглашение действительно 2 минуты.
+- С версии 0.13.0 сетевые ставки 100–10 000 000 проверяются сервером. Кошелёк
+  аккаунта хранится в SQLite: при первой миграции 10 000 монет / 20 кристаллов.
+  Локальный кошелёк игры с ботами остаётся отдельным, не импортируется с телефона.
+- Ставки всех живых участников резервируются атомарно при старте, до старта выход
+  бесплатный. Сдача/выход во время игры окончательно проигрывает ставку один раз,
+  отдельного штрафа нет. По завершении выигравшим возвращается ставка и доля
+  проигранных ставок; боты играют с условной ставкой банка, аккаунтов у них нет.
+- Подсветка своих карт: 1 кристалл на партию; доступ к отбою: 3 на партию;
+  отмена: 2 за успешную отмену. Сервер не отдаёт чужие руки и не принимает баланс
+  от клиента. Отмена доступна 3 секунды после ручной карты, пока не было ответа;
+  в этом окне ответы блокируются. После добора/завершения раунда отмены нет.
+- SQLite сохраняет аккаунты, сессии и дружбу. Комнаты, активные партии и приглашения
+  пока в памяти: при перезапуске сервера они закрываются. Переподключение во время
+  работы сервера возможно по тому же коду и аккаунту.
+- Нет восстановления забытого пароля, проверки email, публичного матчмейкинга,
+  push-уведомлений при закрытом приложении. Приглашения опрашиваются в главном меню.
+  Это первая версия для проверки с друзьями, не готовый сервис на большие нагрузки.
+
+## Установка: Ubuntu 24.04, Docker, nginx, HTTPS
+
+Выполняйте команды **на своём VPS**, от администратора. Не присылайте пароли/SSH-ключи
+в чат и не добавляйте их в Git. Если nginx/сайты уже настроены — сначала сохраните
+их конфигурацию; не заменяйте существующий сайт вслепую. Проверьте, что DNS A-запись
+`vm670328.eurodir.ru` указывает на `46.30.41.204` (и нет неверной AAAA-записи).
+
+```bash
+sudo apt update
+sudo apt install -y git docker.io docker-compose-v2 nginx certbot python3-certbot-nginx
+sudo systemctl enable --now docker nginx
+
+# Если каталог уже существует, не клонируйте поверх него — обновите git checkout.
+sudo git clone --branch arena/2937ce90-openfool12 \
+  https://github.com/nbnbnjkii/OpenFool12.git /opt/openfool
+cd /opt/openfool/server
+sudo docker compose up -d --build
+curl --fail http://127.0.0.1:8080/health
+# Ожидается: {"ok":true,"version":1}
+
+sudo cp nginx.conf /etc/nginx/sites-available/openfool
+sudo ln -s /etc/nginx/sites-available/openfool /etc/nginx/sites-enabled/openfool
+sudo nginx -t
+sudo systemctl reload nginx
+
+# Укажите СВОЙ действующий email при запросе Certbot.
+sudo certbot --nginx -d vm670328.eurodir.ru
+curl --fail https://vm670328.eurodir.ru/health
+sudo certbot renew --dry-run
 ```
 
-APK: `apk-build/build/outputs/apk/debug/OpenFoolNeon-debug.apk` (the exact filename
-may vary with Gradle). This is a **debug-signed** installable build, not a
-production release signed with the original author's key. Android 5.0+.
+Откройте входящие TCP 80 и 443 в firewall VPS/провайдера. При использовании UFW
+сначала разрешите свой SSH-порт, чтобы не потерять доступ. **Не открывайте 8080
+наружу**: он привязан к localhost и доступен только nginx. APK использует только
+`https://vm670328.eurodir.ru/v1`, поэтому до установки корректного TLS-сертификата
+регистрация/вход не заработают. Не отключайте проверку TLS и не переводите пароль на HTTP.
 
-Alternatively open **Actions → Android APK → Run workflow**, select the working
-branch, then download the `OpenFool-neon-debug` artifact when the job succeeds.
+Если репозиторий закрытый, используйте свой уже настроенный доступ GitHub на VPS
+или скопируйте папку `server/` туда самостоятельно. Не вводите GitHub-токены в чат.
 
-## Design and functionality
+## Обновление и проверка
 
-- Original generated artwork inspired by the supplied portrait references;
-  no phone frame or flattened reference screenshot is used as game UI.
-- Portrait lobby, green/purple/blue actions, card banner, avatar medallions.
-- Portrait neon table; 2–6 player bot selector, 24/36/52-card decks, throw-in / passing modes; live hand/deck counters.
-- Separate БИТО / БЕРУ controls wired to the existing rules engine.
-- Portrait results and replay/menu actions. Existing advanced card/rule settings
-  remain available in their landscape layout, with the shared dark background.
-- Network play and tournaments are **not implemented** in the original project.
-  Their lobby buttons explain that they are unavailable. Currency/shop/social
-  counters are intentionally not fabricated.
-- Textures can be regenerated with Pillow: `python tools/generate_theme.py`
-  (uses DejaVu Sans installed in `/usr/share/fonts/truetype/dejavu`).
+```bash
+cd /opt/openfool
+sudo git pull --ff-only origin arena/2937ce90-openfool12
+cd server
+sudo docker compose up -d --build
+sudo docker compose ps
+sudo docker compose logs --tail=100 openfool
+curl --fail https://vm670328.eurodir.ru/health
+```
 
-## Manual smoke tests on device
+Обновление закрывает незавершённые комнаты; заранее предупредите игроков.
+`docker compose down` сохраняет аккаунты, `down -v` **удаляет базу** — не применяйте
+последний вариант к рабочему серверу.
 
-1. Open lobby; wait until cards finish loading. Rotate/resize: UI remains centred.
-2. Start 2–6 player bot games. A 24-card deck supports at most four players. Check avatars, card counts and trump card.
-3. Drag a card from the fan to the table to attack. Drag onto a specific
-   uncovered attack card to cover it (not necessarily the first card). A tap
-   must not play a card; a canceled drag or invalid target must restore it.
-   Take cards or finish throwing with БИТО. During animations,
-   action buttons must not submit an extra move. A large hand stays onscreen.
-   In passing mode, drag a matching-rank card to empty table space before defending; verify the next
-   active defender has enough cards. In throw-in mode, passing must be rejected.
-4. Finish a game, replay, then return to lobby using МЕНЮ or Android Back.
-5. Open settings, choose another card deck, save and start a new game.
-6. Confirm online/friends/tournaments never pretend to connect to a server.
+## Резервная копия
 
-Compilation alone does not replace these device checks.
+Сделайте согласованную копию SQLite встроенным `VACUUM INTO` (он включает данные WAL),
+а затем заберите файл с VPS в безопасное место. Бэкап содержит хеши паролей и сессий.
 
-UI fonts are rasterized at 3x virtual size and downscaled with linear mipmap
-filtering. Button PNGs are rendered natively at 1320×288 with antialiased masks.
-The Android unit suite checks standard deck sizes/dealing for 2–6 players and
-passing-mode legality (rank, capacity, membership, full table, defense started).
+```bash
+cd /opt/openfool/server
+sudo docker compose exec openfool node --input-type=module -e \
+  'import {DatabaseSync} from "node:sqlite"; const db=new DatabaseSync("/data/openfool.sqlite"); db.exec("VACUUM INTO '\''/data/backup.sqlite'\''"); db.close();'
+# Для повторного бэкапа сначала выберите новое имя — SQLite не перезаписывает файл.
+sudo docker compose cp openfool:/data/backup.sqlite ./backup.sqlite
+sudo chmod 600 ./backup.sqlite
+```
 
-## Fan and drag controls (0.6.0)
+Не публикуйте backup.sqlite. Для восстановления остановите контейнер и восстановите
+базу в томе с владельцем UID 1000; сначала проверьте процедуру на тестовой копии.
 
-The human hand is laid out as a bounded fan for 1–52 cards. Visible card
-transforms and Scene2D hit testing use the same scale and rotation. One pointer
-can drag one human-owned card at a time; cards in motion and bot turns are
-locked. Legal drop targets are highlighted. Dropping on a covered card, on the
-wrong suit/rank, outside the play area, or canceling touch focus restores the
-hand without a move. In passing mode, drop a matching rank on empty table space
-to transfer rather than cover. Auto-tests cover arbitrary defense indices,
-invalid drops at the rules boundary, fully covered tables, and fan geometry.
+## Локальные тесты, Node 22.13+ / Node 24
 
-## Context-sensitive turn controls (0.6.1)
+Внешних npm-зависимостей нет.
 
-- БЕРУ is shown only when the human is defending uncovered attacks, including
-  after a transfer; it is hidden on an attacking turn, during animations/dragging,
-  after taking is declared, and once all attacks are covered.
-- БИТО is shown only when the human can finish throwing and the bot has covered
-  every attack. The human may throw another legal card or finish the round.
-- After the human covers all attacks, bots automatically finish that round.
-- If the defending bot takes, ОТДАТЬ lets the human finish throwing and hand
-  over the pile; the incorrect БИТО label is not used for an unblocked pile.
-- Explicit human confirmation remains available at the throw limit or when
-  the defending bot has used its last card. Hidden controls are not touchable.
+```bash
+cd server
+npm test
+HOST=127.0.0.1 PORT=8080 npm start
+```
 
-## Automatic drop targeting (0.6.2)
+Тестируются регистрация/вход/отзыв сессии, комнаты, дружба, приглашения,
+скрытие рук, необязательные боты, запрет чужих ходов, сохранение всех карт
+и автоматические полные партии для 2–6 игроков. На реальных телефонах и на VPS
+эта версия ещё должна пройти совместную проверку.
 
-A defensive drop anywhere in the play area automatically covers a legal,
-uncovered attack. A legal card directly under the pointer takes priority;
-otherwise the first legal open attack is selected. Hover highlighting and
-release use the same target policy. A card cannot cover an already covered
-attack, the wrong suit, or a higher card. If no defense is legal, passing is
-attempted in passing mode; otherwise the card returns to the hand. Drops
-outside the play area (unless directly on an open attack) remain canceled.
-This supersedes the earlier exact-target-only and empty-space-transfer controls.
+## API (JSON, Bearer token)
 
-## Lower hand and natural card colors (0.6.3)
+Публичные: `GET /health`, `POST /v1/auth/register`, `POST /v1/auth/login`.
+В register/login: `login`, `password`; при регистрации дополнительно `nickname`, `avatar`.
+Остальные требуют `Authorization: Bearer <token>`:
 
-The portrait fan now uses a shallow ±10-degree angle and sits behind an opaque
-95-unit bottom panel. Approximately the upper half of each card remains visible
-and draggable. The panel blocks touches on the hidden halves; a dragged card
-is lifted above it and becomes fully visible. Fan geometry is checked for all
-hand sizes from 1 to 52.
+- `GET/PUT /v1/me`, `POST /v1/auth/logout`.
+- `POST /v1/rooms`: `capacity`, `deckSize`, `pass`, `addBots`, `bots`.
+- `POST /v1/rooms/{join,state,ready,start,leave,surrender}`: `code`.
+- `POST /v1/rooms/action`: `code`, `type` (`play`, `take`, `done`),
+  для play — `card` (например `6h`), необязательный `target`, `pass`.
+- `GET /v1/friends`; `POST /v1/friends/request`: `code`, `playerId`;
+  `POST /v1/friends/respond`: `playerId`, `accept`.
+- `GET/POST /v1/invites`; отправка: `code`, `playerId`;
+  `POST /v1/invites/respond`: `inviteId`, `accept`.
 
-All hand-card gray/green tinting and hover-target highlights have been removed.
-Cards retain their original deck colors. Automatic legal defense targeting,
-passing rules, and invalid-drop return behavior are unchanged. This supersedes
-the earlier descriptions of target highlighting and a fully visible fan.
-
-## Local wallet, decision clock and paid tools (0.7.0)
-
-- One-time local welcome balance: 10,000 coins and 20 crystals. Persisted in
-  OpenFool preferences, not replenished by reopening a menu or restarting.
-- A 30-second ring surrounds the active avatar. A generated three-beep WAV
-  sounds once when 15 seconds remain. Animation time and app suspension do
-  not consume a decision. At timeout, an undefended human takes; a human
-  throwing finishes; the first attack can be selected automatically.
-- Three icon-only buttons next to the human: undo (2 crystals each successful
-  use), discard viewer (3 crystals to unlock for this game), hints (1 crystal
-  to unlock for this game). The two unlocks reset on a new game, not when a
-  modal is dismissed. Insufficient funds never unlock or charge an action.
-- Paid undo is available for 3 seconds after the last human card. Bots cannot
-  respond during this interval. Undo restores the exact hand, attack/defense
-  arrays, attacker/thrower, done statuses, taking flag and rule state. It cannot
-  undo a bot response, finished round, or revealed deal. Invalid undo is free.
-- The discard modal shows ONLY cards in the actual discard pile, never cards
-  collected by a player. Any tap or Back closes it without reaching underlying
-  game controls. The decision clock continues while it is open.
-- Hints tint ONLY legal cards in the human hand. No opponent/target highlight.
-- Removed the lobby's card-loading indicator and disabled-button wait gate.
-  Only the selected deck is queued instead of all four. Other deck styles
-  load on demand in settings. Necessary assets are finalized on entering a
-  game; a first-launch resource decode can still take time on slower devices.
-
-Manual checks: restart after spending; open/close the discard modal repeatedly;
-try every tool with insufficient funds; undo throws/defenses/transfers; verify
-warning at 15 seconds and timeout at 30; verify the panel cannot leak a tap.
-No real-money purchases or network balance are implemented.
-
-## Reference-inspired compact HUD (0.7.1)
-
-The game table is unchanged. The bottom panel uses the existing navy/teal palette
-with the active action/status on the left, human avatar and timer in the middle,
-and three larger horizontal tool icons on the right. Crystal prices sit above
-the icons; the real saved coin/crystal balances sit below them. Unlocked tools
-show zero further cost for the rest of the game.
-
-The hand's masked half-card layout follows the panel's new 115-unit height.
-Contextual take/done/give buttons share the left slot, never overlap one another
-or the avatar, and retain their original legality checks. A human decision
-shows “Ваш ход”; a bot decision never displays that message.
-
-The top row shows the actual passing/throw-in rule selection and its icon, plus
-“Ставка: 0”. Bot games do not yet implement wager selection or coin settlements,
-so this display does not fabricate a stake or silently debit the wallet.
-
-## Lobby navigation and real local stakes (0.8.0)
-
-The lobby follows the reference's composition: profile and currency chips with
-plus controls, settings gear, card banner, icon-bearing green/purple/orange-blue
-buttons, trophy control with a soon badge, and five persistent bottom tabs.
-Shop/tasks/leaders and notifications honestly describe their unavailable state.
-No fabricated online population, paid top-ups, active tournament, or ranking is
-shown. Friends links to the friend-game configuration.
-
-All three entry points (bots, online, friends) share the same setup and wager
-slider. The 100 / 1K / 10K / 100K / 1M / 10M logarithmic ticks remain visible;
-values beyond the wallet are gray and unreachable. Default stake is 250, saved
-values and drag input are clamped to min(wallet,10M). At a zero balance, zero-
-stake bot practice remains available.
-
-Bot stakes are real local virtual-coin entries, not a decorative header value:
-reserved once at entry; a loss consumes the reservation; a draw refunds it; a
-win pays the original stake plus stake/(players-1), rounded down, matching a
-shared losing player's stake among the remaining players. Exiting unfinished
-play or recovering an interrupted app refunds escrow once. Crystals are separate.
-The live selected stake replaces the previous fixed-zero game-header value.
-
-Online and friend configuration save the wager but never debit coins or pretend
-to connect: transport/server/rooms remain unimplemented. Replay returns to setup
-so the next stake is checked against the newly settled balance.
-
-Tests cover all scale ticks, monotonically clamped drag input, low/zero balances,
-reservation limits, duplicate starts, 2–6-player settlements, and exactly-once
-refund/recovery. These remain debug/local balances, not real-money gambling.
-
-## Readiness, status and surrender (updated in 0.9.2)
-
-Only Готов is available as a play action on entering the table. Local bots
-confirm readiness automatically, with a ready status beside each avatar. Once
-all seats are ready, “Все готовы” precedes a staggered animated deal. Timers,
-paid tools and gameplay stay locked until the last dealt card has arrived.
-
-“Ваш ход” is rendered only in the otherwise-empty action slot, never alongside
-Беру/Бито/Отдать, after taking/done, during animation, dragging, readiness or
-spectating. Taking bots have “Беру” beside their avatar, not in the human slot.
-
-After Ready, the white flag and Android Back/back gesture open a blocking yes/no
-surrender dialog. No charge on No; Yes finalizes the reserved stake as a loss once,
-ends the local match immediately, clears the cards and offers Ready for a new match.
-There is no AI takeover. Before Ready and after surrender, Back/flag exits without
-another warning. A new stake is reserved only when Ready starts the next match.
-Modal time does not consume decision deadlines.
-
-Android Home/recents gestures cannot be vetoed by an ordinary app. Suspending
-pauses local play; returning to an unsettled, readied table opens the same confirmation,
-without automatically forfeiting money. Force-killing before confirmation still
-uses the existing interrupted-game escrow recovery; no claim is made to block
-system navigation or implement a persistent online match.
+Код комнаты — не пароль аккаунта: его можно сообщать друзьям, но возможен подбор.
+На запросы создания/входа, авторизации, друзей и приглашений есть лимиты.
+Не использовать коды как секрет для денежных игр. Перед публичным запуском нужны
+внешний аудит, мониторинг, ограничения регистрации и политика восстановления аккаунтов.
 
 
-## Portrait profile settings (0.10.0)
+## Обновление на 0.13.0 (ставки и инструменты)
 
-Settings uses the same 480×1000 portrait layout as the lobby, with Profile and
-Appearance tabs. The Profile tab edits a 20-character nickname and selects one of
-10 original funny animal avatars, generated by `tools/generate_avatars.py`.
-Save persists both to local preferences; Back discards unsaved edits. The lobby
-and human seat show the saved profile. Bots get different avatars. Appearance
-retains deck selection with preview, sorting, background, and game language.
+Нужно обновить И сервер, И APK на телефонах. Старым APK не разрешается готовность
+к игре на ставку. Аккаунты/сессии/друзья сохраняются; новые таблицы добавляются
+автоматически, без удаления существующей SQLite-базы. Не используйте `down -v`.
 
-## Accounts and friend rooms (0.11.0)
+```bash
+cd /opt/openfool
+sudo git pull --ff-only origin arena/055fadce-openfool12
+cd server
+sudo docker compose up -d --build
+curl --fail https://46.30.41.204/health
+```
 
-The first screen is registration/login; HTTPS session verification opens the menu
-on subsequent launches without storing a password. Sessions expire after 30 days.
-Settings includes logout; server-backed profile changes synchronize nickname/avatar.
-`server/README.md` contains the complete VPS/Docker/nginx/HTTPS installation guide.
-As of 0.11.1, the Android endpoint is https://46.30.41.204/v1; no deployment is automatic.
-See server/IP-HTTPS.md for trusted IP certificate issuance and automatic renewal.
-TLS validation stays enabled; there is no HTTP fallback or trust-all certificate code.
-Until that backend and TLS are installed, the new APK cannot register or log in.
+Ожидается `{"ok":true,"version":2}`. nginx, сертификаты и таймер продления менять
+не требуется. Не запускайте setup-ip-https.sh повторно на VPS с отдельной xui-панелью.
+Обновляйте вне активных партий: комнаты пока в памяти. При перезапуске открытые
+резервы возвращаются, но ставки уже сдавшихся (status=lost) никогда не возвращаются.
+Кристаллы за уже купленные инструменты не возвращаются. Рекомендуется резервная
+копия БД по инструкции выше перед обновлением.
 
-Friend setup supports 2–6 seats with zero bots by default; explicit opt-in allows
-up to four bots while reserving at least two human seats. Four-digit codes are
-server-allocated. The host starts only after the human players are ready. Cards
-are dragged onto a server-authoritative table; only the owner's hand is delivered
-to that phone. 30-second turn deadlines and bot actions run on the server.
-
-Tapping a live player sends a friend request; recipients accept in Friends.
-The table's invite button opens the paginated friend list. Invitations show yes/no
-in the recipient's main menu while the app is open. An existing active table can
-be resumed on app startup with the same account while the backend remains running.
-
-Limitations: these first friend-network matches are free, without local-wallet
-stakes/perks, rankings, public matchmaking, or background push notifications.
-SQLite persists accounts/sessions/friends, but active matches and invites are in
-memory and close on server restart. Offline bot gameplay retains its existing
-wallet/perk rules. Server API and game tests are automated; VPS deployment and
-real multi-device gameplay have not been verified in this environment.
-
-## Friend table visual parity (0.12.0)
-
-Friend room creation now uses the same player-count, deck, mode, heading, Back,
-and primary-button geometry as bot setup. Its optional bot selector replaces the
-stake region; entering a room code has a separate view, not an overlapping field.
-The server API and free-match rules are unchanged; updating the VPS is unnecessary.
-
-The network table uses the local table background at full portrait size, the same
-HandFan algorithm and actual deck texture sizes, lowered/masked own hand, seats,
-HUD artwork, action slot, flag, wallet readout, table pairs and deck geometry.
-Opponent cards are backs only. The deck has a rotated exposed trump card and white
-count directly on the back, without a black badge; after the deck empties the
-trump caption and suit occupy the same positions as the local HUD. Local/net
-drop zones and deck coordinates are shared in PortraitTableLayout.
-
-Room code and a friend-invite icon remain above the table. Host Start is placed
-in the same action slot after Ready. Paid offline tools have dimmed matching icons
-with an explanatory message and never charge crystals in a network match. Network
-stakes remain zero. Server ownership, hidden hands, legality checks and turn
-deadlines are unchanged. New hand cards animate from the deck on match start.
-Automated geometry tests compare the fan for 1–52 cards across all deck widths.
-Real-phone screenshot parity and multi-device play still need manual verification.
+API: POST /v1/rooms требует целочисленное stake; POST /v1/rooms/ready — economyVersion=1.
+POST /v1/rooms/perk: code, type (highlight/discard/undo). Состояние комнаты возвращает
+только собственные wallet/perks/hints/discard/undoUntil. lockedUntil сообщает окно
+безопасной отмены, а не права на просмотр чужих карт. Сетевой баланс обновляется
+также в меню. Покупок за реальные деньги и общего офлайн/онлайн кошелька нет.

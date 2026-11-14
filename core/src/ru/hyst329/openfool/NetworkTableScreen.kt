@@ -19,6 +19,7 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
     private var passCard=false
     private var animateDeal=false
     private var discardOpen=false
+    private var undoIcon: Actor?=null
     private var serverOffset=room.getLong("serverTime")-System.currentTimeMillis()
     private var warnedDeadline=0L
     private val warningSound=try {Gdx.audio.newSound(Gdx.files.internal("audio/turn_warning.wav"))} catch(_:Exception){null}
@@ -32,6 +33,7 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
         }
     }
     private fun command(path: String,extra: Array<Pair<String,Any>> = emptyArray()) {
+        if(path=="/rooms/action"&&locked()){status.setText("Подождите 3-секундное окно отмены хода");return}
         call("POST",path,jsonObject("code" to code,"economyVersion" to 1,*extra)){updateRoom(it)}
     }
     private fun build() {
@@ -147,6 +149,7 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
         else if(actions.done||actions.give)theme.button(stage,if(actions.give)"ОТДАТЬ" else "БИТО","green",12f,28f,177f,62f,26){command("/rooms/action",arrayOf("type" to "done"))}
         else if(TurnControls.showYourTurn(actions,turn==own,phase=="playing"&&!me.getBoolean("out"),room.getBoolean("taking")&&own==defender,false))slot="Ваш ход"
         if(phase=="playing"&&actions.take&&room.getBoolean("pass"))theme.button(stage,if(passCard)"ПЕРЕВОД: ДА" else "ПЕРЕВОД: НЕТ","slate",12f,310f,177f,38f,16){passCard=!passCard;build()}
+        undoIcon=null
         // The server validates ownership, unlock state, cost and undo deadline.
         if(phase=="playing"&&!me.getBoolean("out"))for((index,icon) in listOf("perk_undo","perk_discard","perk_hint").withIndex()) {
             theme.iconButton(stage,icon,309f+index*58f,40f,44f){
@@ -157,7 +160,7 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
                         if(type=="discard"){discardOpen=true;build()}
                     }
                 }
-            }.apply { if(index==0&&room.getLong("undoUntil",0L)<=System.currentTimeMillis()+serverOffset)color=Color(0.45f,0.45f,0.55f,1f) }
+            }.apply { if(index==0)undoIcon=this }
         }
         val slotText=slot
         stage.addActor(object : Actor() {
@@ -273,6 +276,7 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
     private fun secondsRemaining(): Float = ((room.getLong("deadline")-(System.currentTimeMillis()+serverOffset))/1000f).coerceIn(0f,30f)
     override fun dispose(){warningSound?.dispose();super.dispose()}
     override fun update(delta: Float) {
+        undoIcon?.color=if(room.getLong("undoUntil",0L)>System.currentTimeMillis()+serverOffset)Color.WHITE else Color(0.45f,0.45f,0.55f,1f)
         val deadline=room.getLong("deadline")
         if(room.getString("phase")=="playing"&&room.getInt("turn")==room.getInt("seat")&&secondsRemaining()<=15f&&warnedDeadline!=deadline) {
             warnedDeadline=deadline;warningSound?.play(0.8f)

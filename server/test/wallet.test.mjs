@@ -36,3 +36,9 @@ test('expired undo and unaffordable tools never charge or alter the hand',()=>{
  db.prepare('UPDATE wallets SET crystals=0 WHERE user_id=?').run(actor.id);
  assert.throws(()=>room.perk(actor.id,'highlight',n=>wallets.spend(actor.id,n)));assert.equal(room.view(actor.id).perks.highlight,undefined);db.close();
 });
+test('a player already out without cards can leave without being reclassified as surrendered',()=>{
+ const {db,wallets,room}=setup();for(const p of room.players)p.ready=true;wallets.reserve(room);room.start('u0');
+ room.players[0].out=true;room.discard.push(...room.players[0].hand);room.players[0].hand=[];
+ room.leave('u0');assert.equal(room.players[0].surrendered,false);room.phase='ended';wallets.settle(room);
+ assert.equal(wallets.get('u0').coins,10250);assert.equal(wallets.get('u1').coins,9750);db.close();
+});

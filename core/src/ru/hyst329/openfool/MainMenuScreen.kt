@@ -23,6 +23,10 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
     private lateinit var sectionText: Label
     private lateinit var friendAction: Actor
     private lateinit var status: Label
+    private lateinit var coinBalance: Label
+    private lateinit var crystalBalance: Label
+    private val displayedCoins: Int get()=if(game.online.supportsEconomy)game.online.coins else game.economy.coins
+    private val displayedCrystals: Int get()=if(game.online.supportsEconomy)game.online.crystals else game.economy.crystals
     private var selectedTab=0
     private var message=""
     private var inviteElapsed=0f
@@ -42,15 +46,16 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
         }
         theme.image(stage,"ui_chip",110f,902f,106f,29f)
         theme.image(stage,"coin",116f,907f,20f,20f)
-        theme.label(stage,"${game.economy.coins}",139f,903f,54f,27f,16,Color.valueOf("ffdc68"))
+        coinBalance=theme.label(stage,"$displayedCoins",139f,903f,54f,27f,16,Color.valueOf("ffdc68"))
         theme.iconButton(stage,"ui_plus",196f,909f,15f) { selectTab(1) }
         theme.image(stage,"ui_chip",225f,902f,111f,29f)
         theme.image(stage,"crystal",231f,907f,20f,20f)
-        theme.label(stage,"${game.economy.crystals}",254f,903f,48f,27f,16,Color.valueOf("7cdbff"))
+        crystalBalance=theme.label(stage,"$displayedCrystals",254f,903f,48f,27f,16,Color.valueOf("7cdbff"))
         theme.iconButton(stage,"ui_plus",315f,909f,15f) { selectTab(1) }
         theme.iconButton(stage,"ui_gear",423f,929f,35f) {
             game.screen=SettingsScreen(game);dispose()
         }
+        if(game.online.supportsEconomy)theme.label(stage,"Сетевой баланс • у ботов — локальный",110f,877f,330f,22f,12,Color.valueOf("afbed4"))
         val first=stage.actors.size
         theme.image(stage,"banner",20f,690f,440f,186f)
         theme.label(stage,"• Игра с ботами",20f,646f,170f,29f,15,Color.valueOf("8f9bb6")).setAlignment(Align.left)
@@ -102,6 +107,7 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
         }
     }
     override fun render(delta: Float) {
+        coinBalance.setText("$displayedCoins");crystalBalance.setText("$displayedCrystals")
         inviteElapsed+=delta
         if(inviteElapsed>5f&&!inviteBusy&&game.online.token.isNotEmpty()) {
             inviteElapsed=0f;inviteBusy=true

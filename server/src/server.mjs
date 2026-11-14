@@ -29,7 +29,7 @@ export function createService({dbPath=process.env.DATABASE_PATH||'data/openfool.
   const avatar=a=>Number.isInteger(a)&&a>=0&&a<=9?a:0;
   const rate=(key,max)=>{const now=Date.now();let bucket=limits.get(key);if(!bucket||now>bucket.until){bucket={n:0,until:now+60000};limits.set(key,bucket);}if(++bucket.n>max)throw Object.assign(new Error('Слишком много запросов. Подождите минуту'),{status:429});};
   const body=async req=>{let text='';for await(const chunk of req){text+=chunk;check(Buffer.byteLength(text)<=8192,'Слишком большой запрос');}try{const b=text?JSON.parse(text):{};check(b&&typeof b==='object'&&!Array.isArray(b),'Нужен JSON-объект');return b;}catch{check(false,'Неверный JSON');}};
-  const activeRoom=id=>[...rooms.values()].find(r=>r.players.some(p=>p.id===id&&!p.surrendered)&&r.phase!=='ended');
+  const activeRoom=id=>[...rooms.values()].find(r=>r.players.some(p=>p.id===id&&!p.surrendered&&!p.out)&&r.phase!=='ended');
   const syncRoom=r=>{for(const p of r.players)if(!p.bot&&p.surrendered)wallets.loss(r,p.id);if(!r.cancelled)wallets.settle(r);};
   const view=(r,id)=>{syncRoom(r);return {...r.view(id),wallet:wallets.get(id)};};
   const timer=setInterval(()=>{
@@ -99,7 +99,7 @@ export function createService({dbPath=process.env.DATABASE_PATH||'data/openfool.
         } else if(path==='/v1/friends/respond'&&method==='POST') {
           const row=db.prepare('SELECT * FROM friends WHERE a=? AND b=? AND accepted=0').get(String(b.playerId),u.id);check(row,'Запрос не найден');
           if(b.accept===true)db.prepare('UPDATE friends SET accepted=1 WHERE a=? AND b=?').run(row.a,row.b);else db.prepare('DELETE FROM friends WHERE a=? AND b=?').run(row.a,row.b);result={ok:true};
-        } else if(path==='/v1/invites'&&method==='GET')result={invites:[...invites.values()].filter(x=>x.to===u.id&&x.expires>Date.now()&&rooms.has(x.code)).map(x=>({id:x.id,code:x.code,from:publicUser(user(x.from))}))};
+        } else if(path==='/v1/invites'&&method==='GET')result={wallet:wallets.get(u.id),invites:[...invites.values()].filter(x=>x.to===u.id&&x.expires>Date.now()&&rooms.has(x.code)).map(x=>({id:x.id,code:x.code,from:publicUser(user(x.from))}))};
         else if(path==='/v1/invites'&&method==='POST') {
           rate(`invite:${u.id}`,20);const r=room();check(r.phase==='waiting','Партия уже началась');
           check(db.prepare('SELECT 1 FROM friends WHERE accepted=1 AND ((a=? AND b=?) OR (a=? AND b=?))').get(u.id,String(b.playerId),String(b.playerId),u.id),'Сначала добавьте игрока в друзья');
