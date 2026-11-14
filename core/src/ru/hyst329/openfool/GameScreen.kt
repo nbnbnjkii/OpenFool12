@@ -57,7 +57,6 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     private var dragStarted = false
     private var dragStartX = 0f
     private var dragStartY = 0f
-    private var highlightedTarget: CardActor? = null
     private val background: Texture
     private val backgroundColor: Color
     private val suitSymbols: Map<Suit, Sprite> = mapOf(
@@ -208,11 +207,9 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                     dragLayer.toFront()
                     dragLayer.addActor(actor)
                     actor.rotation = 0f
-                    actor.untint()
                 }
                 actor.setPosition(event.stageX - actor.width*actor.scaleX/2,
                     event.stageY - actor.height*actor.scaleY/2)
-                updateDropHighlight(actor,event.stageX,event.stageY)
             }
             override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
                 if (pointer != dragPointer) return
@@ -220,7 +217,6 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 val moved = dragStarted
                 draggedCard = null
                 dragPointer = -1
-                clearDropHighlight()
                 // Tap, canceled focus, wrong turn, wrong target, and off-table release all restore the fan.
                 if (event != null && !event.isTouchFocusCancel && moved && canDrag(actor)) {
                     playDroppedCard(actor,event.stageX,event.stageY)
@@ -229,7 +225,6 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                     playerGroups[0].addActor(actor)
                     layoutHumanHand()
                 }
-                tintCards()
             }
         }
         for (i in cards!!.indices) {
@@ -300,6 +295,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         currentThrowerIndex = firstAttacker
         stage.addActor(dragLayer)
         if (screenOrientationIsPortrait) {
+            // Opaque panel masks the lower half of the fan and blocks touches on hidden cards.
+            neon.image(stage,"lobby",0f,0f,480f,HandFan.PANEL_TOP).touchable = Touchable.enabled
             doneButton = neon.button(stage,"БИТО","green",150f,15f,150f,70f,28) {
                 if (humanActions().done) {
                     currentThrower.sayDone()
@@ -350,7 +347,6 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         }
         if (oldGameState != gameState) {
             logger.debug("Game state is $gameState")
-            tintCards()
             oldGameState = gameState
         }
         when (gameState) {
@@ -597,36 +593,6 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         }
         isPlayerTaking = false
         gameState = READY
-    }
-
-    fun tintCards() {
-        // Tint the available cards for throwing/beating
-        for (a in cardActors.values) {
-            a.untint()
-        }
-        when {
-            currentThrower === players[0] && attackCards[0] != null -> {
-                for (c in players[0].hand) {
-                    val actor = cardActors[c]
-                    // If the card cannot be thrown, grey it out
-                    if (!players[0].cardCanBeThrown(c, attackCards, defenseCards))
-                        actor?.tint(Color.GRAY)
-                }
-            }
-            currentDefender === players[0] -> {
-                for (c in players[0].hand) {
-                    val actor = cardActors[c]
-                    // If the card cannot beat, grey it out
-                    if (!attackCards.indices.any { players[0].cardCanBeBeaten(c, attackCards, defenseCards, trumpSuit,it) })
-                        actor?.tint(Color.GRAY)
-                    // If the card can be passed, tint it green
-                    if (players[0].cardCanBePassed(c, attackCards, defenseCards, nextDefender.hand.size))
-                        actor?.tint(Color.GREEN)
-                }
-            }
-            else -> {
-            }
-        }
     }
 
     private // TODO: Generalise
@@ -918,23 +884,6 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     private fun attackAt(x: Float,y: Float): Int? = attackCards.indices.reversed().firstOrNull {
         val card = attackCards[it]
         card != null && defenseCards[it] == null && cardActors[card]?.containsStagePoint(x,y) == true
-    }
-
-    private fun clearDropHighlight() { highlightedTarget?.untint(); highlightedTarget = null }
-
-    private fun updateDropHighlight(actor: CardActor,x: Float,y: Float) {
-        clearDropHighlight()
-        if (currentDefender.index != 0) return
-        val preferred = attackAt(x,y)
-        if (preferred == null && !onPlayingArea(x,y)) return
-        val user = players[0]
-        val target = user.defenseTarget(actor.card,attackCards,defenseCards,trumpSuit,preferred)
-            ?: if (user.cardCanBePassed(actor.card,attackCards,defenseCards,nextDefender.hand.size))
-                preferred ?: attackCards.indices.firstOrNull { attackCards[it] != null } else null
-        if (target != null) {
-            highlightedTarget = cardActors[attackCards[target]]
-            highlightedTarget?.tint(Color.valueOf("9affc5"))
-        }
     }
 
     private fun playDroppedCard(actor: CardActor,x: Float,y: Float) {

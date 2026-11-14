@@ -1,6 +1,5 @@
 package ru.hyst329.openfool
 
-import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.Batch
 import com.badlogic.gdx.graphics.g2d.Sprite
@@ -37,11 +36,4 @@ internal class CardActor(game: OpenFoolGame, val card: Card, deckStyle: String) 
         return p.x >= 0f && p.x <= width && p.y >= 0f && p.y <= height
     }
 
-    fun tint(color: Color) {
-        face.color = color
-    }
-
-    fun untint() {
-        face.color = Color.WHITE
-    }
 }

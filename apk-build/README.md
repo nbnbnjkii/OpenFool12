@@ -86,3 +86,16 @@ attack, the wrong suit, or a higher card. If no defense is legal, passing is
 attempted in passing mode; otherwise the card returns to the hand. Drops
 outside the play area (unless directly on an open attack) remain canceled.
 This supersedes the earlier exact-target-only and empty-space-transfer controls.
+
+## Lower hand and natural card colors (0.6.3)
+
+The portrait fan now uses a shallow ±10-degree angle and sits behind an opaque
+95-unit bottom panel. Approximately the upper half of each card remains visible
+and draggable. The panel blocks touches on the hidden halves; a dragged card
+is lifted above it and becomes fully visible. Fan geometry is checked for all
+hand sizes from 1 to 52.
+
+All hand-card gray/green tinting and hover-target highlights have been removed.
+Cards retain their original deck colors. Automatic legal defense targeting,
+passing rules, and invalid-drop return behavior are unchanged. This supersedes
+the earlier descriptions of target highlighting and a fully visible fan.

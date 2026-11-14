@@ -45,18 +45,24 @@ class CardDragRulesTest {
         for (i in defenses.indices) defenses[i] = cover
         assertFalse(player().cardCanBeBeaten(cover,attacks,defenses,Suit.CLUBS))
     }
-    @Test fun fanKeepsEveryCardOnscreenAndAboveControls() {
+    @Test fun fanExposesUpperHalfAbovePanelWithoutHorizontalClipping() {
         val w = 360f*0.36f
         val h = 540f*0.36f
         for (count in 1..52) for (index in 0 until count) {
             val pose = HandFan.pose(index,count,w,h,true)
             val a = Math.toRadians(pose.angle.toDouble())
+            val ys = ArrayList<Double>()
             for (x in listOf(0f,w)) for (y in listOf(0f,h)) {
                 val px = pose.x + cos(a)*x - sin(a)*y
                 val py = pose.y + sin(a)*x + cos(a)*y
                 assertTrue("left/right edge, hand=$count",px >= 0 && px <= 480)
-                assertTrue("hand overlaps HUD or table, hand=$count",py >= 85 && py < 350)
+                ys.add(py)
             }
+            val top = ys.maxOrNull()!!
+            val bottom = ys.minOrNull()!!
+            assertTrue("lower half should be masked",bottom < HandFan.PANEL_TOP)
+            val exposedHeight = top - HandFan.PANEL_TOP
+            assertTrue("roughly half a card must remain visible",exposedHeight in (h*0.45)..(h*0.65))
         }
     }
     @Test fun fanAnglesAreSymmetric() {
