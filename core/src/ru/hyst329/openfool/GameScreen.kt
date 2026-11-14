@@ -747,9 +747,13 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         if (event is Player.DoneEvent) {
             // Handle when player says done
             playersSaidDone++
-            currentThrowerIndex += 2
-            currentThrowerIndex %= ruleSet.playerCount
             val player = event.getTarget() as Player
+            if (!ruleSet.teamPlay) {
+                currentThrowerIndex = if (player.index == currentAttacker.index)
+                    nextDefender.index else currentAttacker.index
+            } else {
+                currentThrowerIndex = (currentThrowerIndex + 2) % ruleSet.playerCount
+            }
             playerDoneStatuses[player.index] = true
             logger.debug("${player.name} (${player.index}) says done\n")
             return true

@@ -205,8 +205,12 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
                 handIfTake.add(c)
             }
         }
+        // Skip players who have already emptied their hands (important at 5–6 seats).
+        val nextActiveHand = (1 until playerHands.size)
+                .map { playerHands[(index + it) % playerHands.size] }
+                .firstOrNull { it > 0 } ?: 0
         val canPass = hand.any {
-            cardCanBePassed(it, attackCards, defenseCards, playerHands[(index + 1) % playerHands.size])
+            cardCanBePassed(it, attackCards, defenseCards, nextActiveHand)
         }
         logger.debug("Can${if(canPass) "" else "not"} pass")
         var maxVal = Integer.MIN_VALUE

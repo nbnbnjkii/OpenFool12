@@ -18,7 +18,7 @@ internal class BotSetupScreen(private val game: OpenFoolGame) : Screen {
     private val counts = HashMap<Int, Actor>()
     private val decks = HashMap<Int, Actor>()
     private val modes = HashMap<Boolean, Actor>()
-    private val notice: Label
+    private lateinit var notice: Label
     private val summary: Label
     init {
         Gdx.input.inputProcessor = stage
