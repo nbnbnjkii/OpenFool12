@@ -48,6 +48,7 @@ private val logger = KotlinLogging.logger {}
 
 class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : Screen, EventListener {
     private val assetsReady = game.ensureGameAssets()
+    private val profile = PlayerProfile(game.preferences)
     private val stakeReserved = game.economy.reserveStake(stake,RuleSet(game.preferences).playerCount)
         .also { require(it) { "Stake exceeds wallet balance or another wager is active" } }
     private var wagerReleased = false
@@ -205,7 +206,7 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         }
         // Initialise players
         // TODO: Replace with settings
-        val playerNames = Array(ruleSet.playerCount) { if (it == 0) "Игрок_1" else "Бот_$it" }
+        val playerNames = Array(ruleSet.playerCount) { if (it == 0) profile.nickname else "Бот_$it" }
         players = Array(ruleSet.playerCount) { i -> Player(ruleSet, playerNames[i], i) }
         for (i in 0 until ruleSet.playerCount) {
             players[i].addListener(this)
@@ -454,11 +455,11 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
                 val x = seat[0]
                 val y = seat[1]
                 val size = if (i == 0) 66f else 64f
-                game.batch.draw(neon.texture(if (i == 0) "avatar" else "bot"),x,y,size,size)
+                game.batch.draw(neon.texture(if (i == 0) profile.avatarTexture else "avatar_${i%10}"),x,y,size,size)
                 if (decisionOwner() == i) neon.timerRing(game.batch,x+size/2,y+size/2,size/2+7f,clock.remaining)
                 val f = neon.font(if (i == 0) 14 else 17)
                 f.color = if (currentDefender.index == i || currentThrower.index == i) Color.valueOf("6bffce") else Color.WHITE
-                f.draw(game.batch,players[i].name,x-12f,if (i == 0) 18f else y-3f,90f,com.badlogic.gdx.utils.Align.center,false)
+                f.draw(game.batch,players[i].name.let { if (it.length>10) it.take(9)+"..." else it },x-12f,if (i == 0) 18f else y-3f,90f,com.badlogic.gdx.utils.Align.center,false)
                 if (i > 0) {
                     val status=when {
                         flow.phase==TableFlow.Phase.WAITING || flow.phase==TableFlow.Phase.ANNOUNCING -> if (flow.ready[i]) "Готов" else "Ожидание"

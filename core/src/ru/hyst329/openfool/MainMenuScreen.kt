@@ -16,6 +16,7 @@ import com.badlogic.gdx.utils.viewport.FitViewport
 internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
     private val stage=Stage(FitViewport(480f,1000f))
     private val theme=NeonTheme()
+    private val profile=PlayerProfile(game.preferences)
     private val home=Group()
     private val tabs=ArrayList<Pair<Actor,Label>>()
     private lateinit var sectionTitle: Label
@@ -28,10 +29,14 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
         Gdx.input.inputProcessor=stage
         game.orientationHelper.requestOrientation(OrientationHelper.Orientation.PORTRAIT)
         theme.image(stage,"lobby",0f,0f,480f,1000f)
-        theme.image(stage,"avatar",20f,895f,78f,78f)
+        theme.iconButton(stage,profile.avatarTexture,20f,895f,78f) {
+            game.screen=SettingsScreen(game);dispose()
+        }
         theme.image(stage,"ui_chip",47f,888f,27f,24f)
         theme.label(stage,"1",47f,888f,27f,24f,14,Color.valueOf("6cf39a"))
-        theme.label(stage,"Игрок_1",110f,937f,250f,39f,28).setAlignment(Align.left)
+        theme.label(stage,profile.nickname,110f,937f,250f,39f,28).apply {
+            setAlignment(Align.left);setEllipsis(true)
+        }
         theme.image(stage,"ui_chip",110f,902f,106f,29f)
         theme.image(stage,"coin",116f,907f,20f,20f)
         theme.label(stage,"${game.economy.coins}",139f,903f,54f,27f,16,Color.valueOf("ffdc68"))
