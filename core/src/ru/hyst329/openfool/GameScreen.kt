@@ -328,7 +328,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             THROWN -> {
                 if (currentDefender.index != 0) {
                     if (!isPlayerTaking) {
-                        currentDefender.tryBeat(attackCards, defenseCards, trumpSuit, cardsRemaining(), players.map { it.hand.size }.toTypedArray())
+                        currentDefender.tryBeat(attackCards, defenseCards, trumpSuit, cardsRemaining(),
+                            players.map { it.hand.size }.toTypedArray(), nextDefender.hand.size)
                     } else {
                         currentDefender.sayTake()
                     }

@@ -54,3 +54,5 @@ d.text((330,235),'DURAK',font=font(43),anchor='mm',fill=(255,204,60),stroke_widt
 # Override controls with native 3x, antialiased artwork.
 import runpy
 runpy.run_path("tools/generate_buttons.py")
+
+runpy.run_path("tools/generate_theme_details.py")

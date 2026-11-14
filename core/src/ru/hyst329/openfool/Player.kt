@@ -189,7 +189,8 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
                 defenseCards: Array<Card?>,
                 trumpSuit: Suit,
                 cardsRemaining: Int,
-                playerHands: Array<Int>) {
+                playerHands: Array<Int>,
+                nextPlayerHandSize: Int = playerHands[(index + 1) % playerHands.size]) {
         val RANK_PRESENT_BONUS = 300
         val ranksPresent = BooleanArray(13)
         val handIfTake = ArrayList(hand)
@@ -205,12 +206,8 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
                 handIfTake.add(c)
             }
         }
-        // Skip players who have already emptied their hands (important at 5–6 seats).
-        val nextActiveHand = (1 until playerHands.size)
-                .map { playerHands[(index + it) % playerHands.size] }
-                .firstOrNull { it > 0 } ?: 0
         val canPass = hand.any {
-            cardCanBePassed(it, attackCards, defenseCards, nextActiveHand)
+            cardCanBePassed(it, attackCards, defenseCards, nextPlayerHandSize)
         }
         logger.debug("Can${if(canPass) "" else "not"} pass")
         var maxVal = Integer.MIN_VALUE
