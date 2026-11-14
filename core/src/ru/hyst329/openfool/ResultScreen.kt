@@ -34,7 +34,7 @@ internal class ResultScreen(private val game: OpenFoolGame,
         val places = playersPlaces.entries.sortedBy { it.key }.joinToString("\n") { "${it.key}.  ${it.value}" }
         theme.label(stage,places,30f,285f,420f,200f,25)
         theme.button(stage,"ЕЩЁ ПАРТИЯ","green",30f,165f,420f,86f,27) {
-            game.screen = GameScreen(game); dispose()
+            game.screen = BotSetupScreen(game); dispose()
         }
         theme.button(stage,"ГЛАВНОЕ МЕНЮ","purple",30f,57f,420f,80f,25) { menu() }
     }

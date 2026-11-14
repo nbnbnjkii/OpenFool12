@@ -1,6 +1,5 @@
 package ru.hyst329.openfool
 
-import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.graphics.Texture
 import com.badlogic.gdx.graphics.g2d.Batch
 import com.badlogic.gdx.graphics.g2d.Sprite
@@ -22,39 +21,24 @@ internal class CardActor(game: OpenFoolGame, val card: Card, deckStyle: String) 
         back.setOrigin(back.width / 2, back.height / 2)
     }
 
-    override fun positionChanged() {
-        face.setCenter(x + width * scaleX / 2,
-                y + height * scaleY / 2)
-        back.setCenter(x + width * scaleX / 2,
-                y + height * scaleY / 2)
-        super.positionChanged()
-    }
-
-    override fun rotationChanged() {
-        face.rotation = rotation
-        back.rotation = rotation
-        super.rotationChanged()
-    }
-
-    override fun sizeChanged() {
-        face.setSize(width, height)
-        back.setSize(width, height)
-        super.sizeChanged()
-    }
-
+    // Keep Sprite and Actor transforms identical, including rotated/scaled hit testing.
     override fun draw(batch: Batch?, alpha: Float) {
-        super.draw(batch, alpha)
-        face.setScale(this.scaleX, this.scaleY)
-        back.setScale(this.scaleX, this.scaleY)
-        // System.out.printf("actor %s %s %s %s\n", getX(), getY(), getWidth(), getHeight());
-        (if (isFaceUp) face else back).draw(batch!!)
+        val sprite = if (isFaceUp) face else back
+        sprite.setBounds(x, y, width, height)
+        sprite.setOrigin(originX, originY)
+        sprite.setScale(scaleX, scaleY)
+        sprite.rotation = rotation
+        sprite.draw(batch!!, alpha)
     }
 
-    fun tint(color: Color) {
-        face.color = color
+    // Paid hint affects only actors still in the human hand, never opponent or table cards.
+    fun setHint(enabled: Boolean) {
+        face.color = if (enabled) com.badlogic.gdx.graphics.Color(0.65f,1f,0.76f,1f) else com.badlogic.gdx.graphics.Color.WHITE
     }
 
-    fun untint() {
-        face.color = Color.WHITE
+    fun containsStagePoint(stageX: Float, stageY: Float): Boolean {
+        val p = stageToLocalCoordinates(com.badlogic.gdx.math.Vector2(stageX,stageY))
+        return p.x >= 0f && p.x <= width && p.y >= 0f && p.y <= height
     }
+
 }

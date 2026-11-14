@@ -22,7 +22,7 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
 
     internal inner class CardThrownEvent(val card: Card) : Event()
 
-    internal inner class CardBeatenEvent(val card: Card) : Event()
+    internal inner class CardBeatenEvent(val card: Card, val attackIndex: Int = -1) : Event()
 
     internal inner class CardPassedEvent(val card: Card) : Event()
 
@@ -189,7 +189,8 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
                 defenseCards: Array<Card?>,
                 trumpSuit: Suit,
                 cardsRemaining: Int,
-                playerHands: Array<Int>) {
+                playerHands: Array<Int>,
+                nextPlayerHandSize: Int = playerHands[(index + 1) % playerHands.size]) {
         val RANK_PRESENT_BONUS = 300
         val ranksPresent = BooleanArray(13)
         val handIfTake = ArrayList(hand)
@@ -206,7 +207,7 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
             }
         }
         val canPass = hand.any {
-            cardCanBePassed(it, attackCards, defenseCards, playerHands[(index + 1) % playerHands.size])
+            cardCanBePassed(it, attackCards, defenseCards, nextPlayerHandSize)
         }
         logger.debug("Can${if(canPass) "" else "not"} pass")
         var maxVal = Integer.MIN_VALUE
@@ -294,18 +295,34 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
     fun cardCanBeBeaten(c: Card,
                         attackCards: Array<Card?>,
                         defenseCards: Array<Card?>,
-                        trumpSuit: Suit): Boolean {
-        val attack = attackCards[Arrays.asList<Card>(*defenseCards).indexOf(null)] ?: return false
+                        trumpSuit: Suit,
+                        attackIndex: Int = attackCards.indices.firstOrNull {
+                            attackCards[it] != null && defenseCards[it] == null
+                        } ?: -1): Boolean {
+        if (attackIndex !in attackCards.indices || attackIndex !in defenseCards.indices ||
+            defenseCards[attackIndex] != null) return false
+        val attack = attackCards[attackIndex] ?: return false
         return hand.contains(c) && c.beats(attack, trumpSuit, ruleSet.deuceBeatsAce)
+    }
+
+    /** Respect a legal direct drop; otherwise select the first uncovered card this card can beat. */
+    internal fun defenseTarget(c: Card, attackCards: Array<Card?>, defenseCards: Array<Card?>,
+                               trumpSuit: Suit, preferredIndex: Int? = null): Int? {
+        if (preferredIndex != null && cardCanBeBeaten(c,attackCards,defenseCards,trumpSuit,preferredIndex))
+            return preferredIndex
+        return attackCards.indices.firstOrNull { cardCanBeBeaten(c,attackCards,defenseCards,trumpSuit,it) }
     }
 
     fun beatWithCard(c: Card,
                      attackCards: Array<Card?>,
                      defenseCards: Array<Card?>,
-                     trumpSuit: Suit) {
-        if (cardCanBeBeaten(c, attackCards, defenseCards, trumpSuit)) {
+                     trumpSuit: Suit,
+                     attackIndex: Int = attackCards.indices.firstOrNull {
+                         attackCards[it] != null && defenseCards[it] == null
+                     } ?: -1) {
+        if (cardCanBeBeaten(c, attackCards, defenseCards, trumpSuit, attackIndex)) {
             hand.remove(c)
-            fire(CardBeatenEvent(c))
+            fire(CardBeatenEvent(c, attackIndex))
         }
     }
 
@@ -321,11 +338,13 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
 //        else if (c.rank != ranks.first()) logger.debug("Passing impossible due to unsuitable rank")
 //        else if (attackCards.count { it == null } >= nextPlayerHandSize) logger.debug("Passing impossible due to card excess")
         return ruleSet.allowPass
+                && hand.contains(c)
+                && attackCards.any { it == null }
                 && defenseCards.all { it == null }
                 && attackCards.any { it != null }
                 && ranks.size == 1
                 && c.rank == ranks.first()
-                && attackCards.count { it == null } < nextPlayerHandSize
+                && attackCards.count { it != null } + 1 <= nextPlayerHandSize
     }
 
     fun passWithCard(c: Card,

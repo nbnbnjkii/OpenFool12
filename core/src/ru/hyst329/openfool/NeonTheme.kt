@@ -20,17 +20,21 @@ internal class NeonTheme : Disposable {
     private val textures = HashMap<String, Texture>()
     private val fonts = HashMap<Int, BitmapFont>()
     fun texture(name: String): Texture = textures.getOrPut(name) {
-        Texture(Gdx.files.internal("neon/$name.png")).apply {
-            setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
+        Texture(Gdx.files.internal("neon/$name.png"), true).apply {
+            setFilter(Texture.TextureFilter.MipMapLinearLinear, Texture.TextureFilter.Linear)
         }
     }
     fun font(size: Int): BitmapFont = fonts.getOrPut(size) {
         val generator = FreeTypeFontGenerator(Gdx.files.internal("fonts/8835.otf"))
         val p = FreeTypeFontGenerator.FreeTypeFontParameter()
-        p.size = size
+        p.size = size * 3
+        p.genMipMaps = true
+        p.minFilter = Texture.TextureFilter.MipMapLinearLinear
+        p.magFilter = Texture.TextureFilter.Linear
         p.characters = (32..126).map { it.toChar() }.joinToString("") +
                 (0x410..0x44f).map { it.toChar() }.joinToString("") + "Ёё•→"
         val result = generator.generateFont(p)
+        result.data.setScale(1f / 3f)
         generator.dispose()
         result
     }
@@ -47,7 +51,9 @@ internal class NeonTheme : Disposable {
         val actor = object : Actor() {
             override fun draw(batch: Batch, parentAlpha: Float) {
                 val press = if (listeners.size > 0 && isPressed) 3f else 0f
+                batch.color = this.color
                 batch.draw(texture(color), x, y - press, width, height)
+                batch.color = Color.WHITE
                 val f = font(size)
                 f.color = Color.WHITE
                 f.draw(batch, text, x, y + height/2 + size/2 - press, width, Align.center, false)
@@ -67,6 +73,44 @@ internal class NeonTheme : Disposable {
             override fun clicked(event: InputEvent?, x: Float, y: Float) { action() }
         })
         stage.addActor(actor); return actor
+    }
+    fun menuButton(stage: Stage,text: String,background: String,icon: String,x: Float,y: Float,
+                   w: Float,h: Float,size: Int,action: () -> Unit): Actor {
+        val actor=object : Actor() {
+            override fun draw(batch: Batch,parentAlpha: Float) {
+                batch.color=Color.WHITE
+                batch.draw(texture(background),x,y,width,height)
+                batch.draw(texture(icon),x+24f,y+(height-52f)/2f,52f,52f)
+                font(size).color=Color.WHITE
+                font(size).draw(batch,text,x+90f,y+height/2+size/2,width-105f,Align.center,false)
+            }
+        }
+        actor.setBounds(x,y,w,h)
+        actor.addListener(object : ClickListener() {
+            override fun clicked(event: InputEvent?,x: Float,y: Float) { action() }
+        })
+        stage.addActor(actor);return actor
+    }
+    fun iconButton(stage: Stage, name: String, x: Float,y: Float,size: Float,action: () -> Unit): Actor {
+        val icon = image(stage,name,x,y,size,size)
+        icon.addListener(object : ClickListener() {
+            override fun clicked(event: InputEvent?, x: Float,y: Float) { action() }
+        })
+        return icon
+    }
+    fun timerRing(batch: Batch,cx: Float,cy: Float,radius: Float,seconds: Float) {
+        val pixel=texture("pixel")
+        val active=kotlin.math.ceil(seconds.coerceIn(0f,30f)/30f*60).toInt()
+        for (i in 0 until 60) {
+            val angle=90f-i*6f
+            val a=Math.toRadians(angle.toDouble())
+            batch.color=if (i < active) (if (seconds<=15f) Color.valueOf("ffc563") else Color.valueOf("60edbf")) else Color.valueOf("38445c")
+            batch.draw(pixel,cx+kotlin.math.cos(a).toFloat()*radius-1f,
+                cy+kotlin.math.sin(a).toFloat()*radius-3f,1f,3f,2f,6f,1f,1f,angle-90f,0,0,2,2,false,false)
+        }
+        batch.color=Color.WHITE
+        font(13).color=Color.WHITE
+        font(13).draw(batch,"${kotlin.math.ceil(seconds).toInt()}",cx-15f,cy+radius+15f,30f,Align.center,false)
     }
     override fun dispose() { textures.values.forEach { it.dispose() }; fonts.values.forEach { it.dispose() } }
 }

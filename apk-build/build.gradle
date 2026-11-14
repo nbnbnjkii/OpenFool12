@@ -13,8 +13,8 @@ android {
         applicationId 'ru.hyst329.openfool'
         minSdk 21
         targetSdk 35
-        versionCode 31
-        versionName '0.4.0-neon'
+        versionCode 47
+        versionName '0.11.0-neon'
     }
     sourceSets.main {
         manifest.srcFile '../android/AndroidManifest.xml'
@@ -27,11 +27,13 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+    testOptions { unitTests.returnDefaultValues = true }
     kotlinOptions { jvmTarget = '1.8' }
     packaging.resources.excludes += ['META-INF/robovm/ios/robovm.xml', 'META-INF/INDEX.LIST']
 }
 
 dependencies {
+    testImplementation 'junit:junit:4.13.2'
     implementation 'com.badlogicgames.gdx:gdx:1.9.10'
     implementation 'com.badlogicgames.gdx:gdx-backend-android:1.9.10'
     implementation 'com.badlogicgames.gdx:gdx-freetype:1.9.10'

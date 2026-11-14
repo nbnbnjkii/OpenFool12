@@ -2,7 +2,7 @@ name: Android APK
 on:
   workflow_dispatch:
   push:
-    branches: ['arena/65b27c44-openfool12']
+    branches: ['arena/2937ce90-openfool12']
     paths: ['core/**', 'android/**', 'apk-build/**', '.github/workflows/android-apk.yml']
 permissions:
   contents: read
@@ -21,7 +21,7 @@ jobs:
       - name: Build debug APK
         run: |
           set -o pipefail
-          gradle -p apk-build assembleDebug --console=plain 2>&1 | tee build.log
+          gradle -p apk-build testDebugUnitTest assembleDebug --console=plain 2>&1 | tee build.log
       - name: Report build errors
         if: failure()
         run: |

@@ -56,7 +56,7 @@ internal class NewGameScreen(private val game: OpenFoolGame) : Screen {
         passCheckBox.setBounds(340f, 250f, 400f, 40f)
         stage.addActor(passCheckBox)
         passCheckBox.isChecked = ruleSet.allowPass
-        val intSpinnerModel = IntSpinnerModel(ruleSet.playerCount, 2, 5, 1)
+        val intSpinnerModel = IntSpinnerModel(ruleSet.playerCount, 2, 6, 1)
         playerCountSpinner = Spinner(game.localeBundle.get("PlayerCount"), intSpinnerModel)
         playerCountSpinner.setBounds(340f, 200f, 400f, 40f)
         playerCountSpinner.addListener(object : ChangeListener() {
@@ -73,7 +73,7 @@ internal class NewGameScreen(private val game: OpenFoolGame) : Screen {
         cardCountLabel.setBounds(340f, 100f, 180f, 40f)
         stage.addActor(cardCountLabel)
         cardCountSelectBox = VisSelectBox()
-        cardCountSelectBox.setItems(24, 32, 36, 52)
+        cardCountSelectBox.setItems(24, 36, 52)
         println("card count is ${ruleSet.cardCount}")
         cardCountSelectBox.selected = ruleSet.cardCount
         println("selected is ${cardCountSelectBox.selected}")
@@ -118,7 +118,7 @@ internal class NewGameScreen(private val game: OpenFoolGame) : Screen {
         ruleSet.teamPlay = teamCheckBox.isChecked
         ruleSet.allowPass = passCheckBox.isChecked
         ruleSet.playerCount = (playerCountSpinner.model as IntSpinnerModel).value
-        ruleSet.cardCount = cardCountSelectBox.selected
+        ruleSet.cardCount = RuleSet.compatibleDeckSize(cardCountSelectBox.selected, ruleSet.playerCount)
         ruleSet.save(game.preferences)
         game.screen = GameScreen(game)
         dispose()

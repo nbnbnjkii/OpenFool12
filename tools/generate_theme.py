@@ -50,3 +50,15 @@ for name,x,angle in [('1d',212,18),('13s',281,0),('1s',347,-15)]:
 d=ImageDraw.Draw(banner)
 d.text((330,164),'ДУРАК',font=font(99),anchor='mm',fill=(213,251,255),stroke_width=7,stroke_fill=(13,66,160))
 d.text((330,235),'DURAK',font=font(43),anchor='mm',fill=(255,204,60),stroke_width=2,stroke_fill=(153,81,26)); d.rounded_rectangle((2,2,657,275),27,outline=(83,70,117),width=4); save(banner,'banner')
+
+# Override controls with native 3x, antialiased artwork.
+import runpy
+runpy.run_path("tools/generate_buttons.py")
+
+runpy.run_path("tools/generate_theme_details.py")
+
+runpy.run_path("tools/generate_game_extras.py")
+
+runpy.run_path("tools/generate_hud.py")
+
+runpy.run_path("tools/generate_lobby.py")
