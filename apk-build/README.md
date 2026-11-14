@@ -129,3 +129,20 @@ Manual checks: restart after spending; open/close the discard modal repeatedly;
 try every tool with insufficient funds; undo throws/defenses/transfers; verify
 warning at 15 seconds and timeout at 30; verify the panel cannot leak a tap.
 No real-money purchases or network balance are implemented.
+
+## Reference-inspired compact HUD (0.7.1)
+
+The game table is unchanged. The bottom panel uses the existing navy/teal palette
+with the active action/status on the left, human avatar and timer in the middle,
+and three larger horizontal tool icons on the right. Crystal prices sit above
+the icons; the real saved coin/crystal balances sit below them. Unlocked tools
+show zero further cost for the rest of the game.
+
+The hand's masked half-card layout follows the panel's new 115-unit height.
+Contextual take/done/give buttons share the left slot, never overlap one another
+or the avatar, and retain their original legality checks. A human decision
+shows “Ваш ход”; a bot decision never displays that message.
+
+The top row shows the actual passing/throw-in rule selection and its icon, plus
+“Ставка: 0”. Bot games do not yet implement wager selection or coin settlements,
+so this display does not fabricate a stake or silently debit the wallet.

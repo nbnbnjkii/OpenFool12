@@ -313,38 +313,37 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         stage.addActor(dragLayer)
         if (screenOrientationIsPortrait) {
             // Opaque panel masks the lower half of the fan and blocks touches on hidden cards.
-            neon.image(stage,"lobby",0f,0f,480f,HandFan.PANEL_TOP).touchable = Touchable.enabled
-            doneButton = neon.button(stage,"БИТО","green",150f,15f,150f,70f,28) {
+            neon.image(stage,"hud_panel",0f,0f,480f,HandFan.PANEL_TOP).touchable = Touchable.enabled
+            doneButton = neon.button(stage,"БИТО","green",12f,28f,177f,62f,26) {
                 if (humanActions().done) {
                     currentThrower.sayDone()
                     gameState = FINISHED
                 }
                 updateActionButtons()
             }
-            takeButton = neon.button(stage,"БЕРУ","gold",315f,15f,150f,70f,28) {
+            takeButton = neon.button(stage,"БЕРУ","gold",12f,28f,177f,62f,26) {
                 if (humanActions().take) currentDefender.sayTake()
                 updateActionButtons()
             }
             // When a bot takes, the human may still throw in, then explicitly hand over the pile.
-            giveButton = neon.button(stage,"ОТДАТЬ","green",150f,15f,150f,70f,24) {
+            giveButton = neon.button(stage,"ОТДАТЬ","green",12f,28f,177f,62f,24) {
                 if (humanActions().give) {
                     currentThrower.sayDone()
                     gameState = FINISHED
                 }
                 updateActionButtons()
             }
-            undoButton = neon.iconButton(stage,"perk_undo",102f,64f,29f) { undoLastCard() }
-            neon.iconButton(stage,"perk_discard",102f,33f,29f) {
+            undoButton = neon.iconButton(stage,"perk_undo",309f,40f,44f) { undoLastCard() }
+            neon.iconButton(stage,"perk_discard",367f,40f,44f) {
                 if (perks.unlockDiscard()) openDiscard() else toast("Недостаточно кристаллов: просмотр стоит 3")
             }
-            neon.iconButton(stage,"perk_hint",102f,2f,29f) {
+            neon.iconButton(stage,"perk_hint",425f,40f,44f) {
                 val already = perks.highlightEnabled
                 if (perks.unlockHighlight()) toast(if (already) "Подсветка уже активна на эту партию" else "Подсветка на партию включена: -1 кристалл")
                 else toast("Недостаточно кристаллов: подсветка стоит 1")
             }
-            neon.label(stage,"Возврат: 2  •  Отбой: 3  •  Подсветка: 1",105f,912f,360f,24f,13,Color.valueOf("a8b9d3"))
             updateActionButtons()
-            neon.button(stage,"МЕНЮ","slate",15f,920f,80f,46f,16) {
+            neon.button(stage,"МЕНЮ","slate",15f,932f,65f,45f,13) {
                 game.screen = MainMenuScreen(game); dispose()
             }
         }
@@ -471,23 +470,22 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         game.batch.begin()
         if (screenOrientationIsPortrait) {
             for (i in players.indices) {
-                val x = when (i) { 0 -> 20f; 1 -> 205f; 2, 4 -> 20f; else -> 395f }
-                val y = when (i) { 0 -> 20f; 1 -> 825f; 2, 3 -> 635f; else -> 370f }
+                val x = when (i) { 0 -> 210f; 1 -> 205f; 2, 4 -> 20f; else -> 395f }
+                val y = when (i) { 0 -> 25f; 1 -> 825f; 2, 3 -> 635f; else -> 370f }
                 val size = if (i == 0) 66f else 64f
                 game.batch.draw(neon.texture(if (i == 0) "avatar" else "bot"),x,y,size,size)
                 if (decisionOwner() == i) neon.timerRing(game.batch,x+size/2,y+size/2,size/2+7f,clock.remaining)
-                val f = neon.font(17)
+                val f = neon.font(if (i == 0) 14 else 17)
                 f.color = if (currentDefender.index == i || currentThrower.index == i) Color.valueOf("6bffce") else Color.WHITE
-                f.draw(game.batch,players[i].name,x-12f,y-3f,90f,com.badlogic.gdx.utils.Align.center,false)
+                f.draw(game.batch,players[i].name,x-12f,if (i == 0) 18f else y-3f,90f,com.badlogic.gdx.utils.Align.center,false)
                 if (i > 0) f.draw(game.batch,"${players[i].hand.size} карт",x-12f,y-25f,90f,com.badlogic.gdx.utils.Align.center,false)
             }
-            neon.font(14).color = Color.WHITE
-            neon.font(14).draw(game.batch,"${game.economy.coins} монет  •  ${game.economy.crystals} кристаллов",130f,958f,335f,com.badlogic.gdx.utils.Align.right,false)
+            drawGameHud()
             if (messageSeconds > 0f) neon.font(14).draw(game.batch,message,15f,276f,450f,com.badlogic.gdx.utils.Align.center,true)
             else if (undoWindow > 0f) neon.font(14).draw(game.batch,"Возврат карты: 2 кристалла (${kotlin.math.ceil(undoWindow).toInt()} с)",15f,276f,450f,com.badlogic.gdx.utils.Align.center,false)
             neon.font(20).draw(game.batch,"${cardsRemaining()}",388f,778f)
             val hint = if (isPlayerTaking) "${currentDefender.name} берёт" else if (currentDefender.index == 0) if (ruleSet.allowPass) "Тяните на стол — отбой или перевод" else "Тяните на стол — карта сама найдёт цель" else if (currentThrower.index == 0) "Перетащите карту на стол" else "Ход соперника"
-            neon.font(15).draw(game.batch,hint,0f,340f,480f,com.badlogic.gdx.utils.Align.center,false)
+            if (decisionOwner() != 0) neon.font(15).draw(game.batch,hint,0f,340f,480f,com.badlogic.gdx.utils.Align.center,false)
         } else {
         for (i in 0 until ruleSet.playerCount) {
             val position = (if (i == 0) playerPosition else aiPosition).clone()
@@ -909,6 +907,42 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             }
             return players[currentThrowerIndex]
         }
+
+    private fun drawGameHud() {
+        val batch = game.batch
+        val mode = if (ruleSet.allowPass) "ПЕРЕВОДНОЙ" else "ПОДКИДНОЙ"
+        neon.font(18).color = Color.valueOf("c7d8ee")
+        neon.font(18).draw(batch,mode,90f,973f,235f,com.badlogic.gdx.utils.Align.center,false)
+        batch.draw(neon.texture(if (ruleSet.allowPass) "mode_pass" else "mode_throw"),191f,923f,35f,35f)
+        neon.font(16).color = Color.WHITE
+        // Bot games have no wager accounting yet. Never show a fictional paid stake.
+        neon.font(16).draw(batch,"Ставка: 0",330f,968f,113f,com.badlogic.gdx.utils.Align.right,false)
+        batch.draw(neon.texture("coin"),450f,950f,21f,21f)
+
+        val actions = humanActions()
+        val hasAction = actions.take || actions.done || actions.give
+        val humanTurn = decisionOwner() == 0
+        if (!hasAction) {
+            val f = neon.font(if (humanTurn) 25 else 18)
+            f.color = if (humanTurn) Color.valueOf("73f0c1") else Color.valueOf("aebbd3")
+            f.draw(batch,if (humanTurn) "Ваш ход" else "Ход соперника",12f,69f,177f,com.badlogic.gdx.utils.Align.center,false)
+        } else if (humanTurn) {
+            neon.font(21).color = Color.valueOf("73f0c1")
+            neon.font(21).draw(batch,"Ваш ход",0f,247f,480f,com.badlogic.gdx.utils.Align.center,false)
+        }
+        val prices = listOf(2,if (perks.discardVisible) 0 else 3,if (perks.highlightEnabled) 0 else 1)
+        for ((index,cost) in prices.withIndex()) {
+            val x = 309f+58f*index
+            neon.font(15).color = Color.valueOf("d6e6ff")
+            neon.font(15).draw(batch,"$cost",x,105f,25f,com.badlogic.gdx.utils.Align.center,false)
+            batch.draw(neon.texture("crystal"),x+25f,90f,14f,16f)
+        }
+        batch.draw(neon.texture("coin"),310f,7f,16f,16f)
+        batch.draw(neon.texture("crystal"),399f,7f,16f,16f)
+        neon.font(13).color = Color.WHITE
+        neon.font(13).draw(batch,"${game.economy.coins}",331f,22f,66f,com.badlogic.gdx.utils.Align.left,false)
+        neon.font(13).draw(batch,"${game.economy.crystals}",420f,22f,50f,com.badlogic.gdx.utils.Align.left,false)
+    }
 
     private fun toast(text: String) { message = text; messageSeconds = 4f }
 
