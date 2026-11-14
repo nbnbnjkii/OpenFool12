@@ -62,3 +62,16 @@ wrong suit/rank, outside the play area, or canceling touch focus restores the
 hand without a move. In passing mode, drop a matching rank on empty table space
 to transfer rather than cover. Auto-tests cover arbitrary defense indices,
 invalid drops at the rules boundary, fully covered tables, and fan geometry.
+
+## Context-sensitive turn controls (0.6.1)
+
+- БЕРУ is shown only when the human is defending uncovered attacks, including
+  after a transfer; it is hidden on an attacking turn, during animations/dragging,
+  after taking is declared, and once all attacks are covered.
+- БИТО is shown only when the human can finish throwing and the bot has covered
+  every attack. The human may throw another legal card or finish the round.
+- After the human covers all attacks, bots automatically finish that round.
+- If the defending bot takes, ОТДАТЬ lets the human finish throwing and hand
+  over the pile; the incorrect БИТО label is not used for an unblocked pile.
+- Explicit human confirmation remains available at the throw limit or when
+  the defending bot has used its last card. Hidden controls are not touchable.

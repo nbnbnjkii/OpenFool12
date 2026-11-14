@@ -49,6 +49,9 @@ private val logger = KotlinLogging.logger {}
 class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     private val neon = NeonTheme()
     private val dragLayer = Group()
+    private var takeButton: com.badlogic.gdx.scenes.scene2d.Actor? = null
+    private var doneButton: com.badlogic.gdx.scenes.scene2d.Actor? = null
+    private var giveButton: com.badlogic.gdx.scenes.scene2d.Actor? = null
     private var draggedCard: CardActor? = null
     private var dragPointer = -1
     private var dragStarted = false
@@ -297,14 +300,26 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         currentThrowerIndex = firstAttacker
         stage.addActor(dragLayer)
         if (screenOrientationIsPortrait) {
-            neon.button(stage,"БИТО","green",150f,15f,150f,70f,28) {
-                if (draggedCard == null && gameState != DRAWING && gameState != THROWING && gameState != BEATING &&
-                        currentThrower.index == 0 && attackCards[0] != null) currentThrower.sayDone()
+            doneButton = neon.button(stage,"БИТО","green",150f,15f,150f,70f,28) {
+                if (humanActions().done) {
+                    currentThrower.sayDone()
+                    gameState = FINISHED
+                }
+                updateActionButtons()
             }
-            neon.button(stage,"БЕРУ","gold",315f,15f,150f,70f,28) {
-                if (draggedCard == null && gameState != DRAWING && gameState != THROWING && gameState != BEATING &&
-                        currentDefender.index == 0 && attackCards[0] != null && !isPlayerTaking) currentDefender.sayTake()
+            takeButton = neon.button(stage,"БЕРУ","gold",315f,15f,150f,70f,28) {
+                if (humanActions().take) currentDefender.sayTake()
+                updateActionButtons()
             }
+            // When a bot takes, the human may still throw in, then explicitly hand over the pile.
+            giveButton = neon.button(stage,"ОТДАТЬ","green",150f,15f,150f,70f,24) {
+                if (humanActions().give) {
+                    currentThrower.sayDone()
+                    gameState = FINISHED
+                }
+                updateActionButtons()
+            }
+            updateActionButtons()
             neon.button(stage,"МЕНЮ","slate",15f,920f,80f,46f,16) {
                 game.screen = MainMenuScreen(game); dispose()
             }
@@ -339,11 +354,11 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             oldGameState = gameState
         }
         when (gameState) {
-            READY -> if (currentAttacker.index != 0) {
-                throwLimit = min((if (ruleSet.loweredFirstDiscardLimit
-                        && discardPile.isEmpty())
-                    DEAL_LIMIT else DEAL_LIMIT - 1), currentDefender.hand.size)
-                currentAttacker.startTurn(trumpSuit, cardsRemaining(), players.map { it.hand.size }.toTypedArray())
+            READY -> {
+                throwLimit = min(if (ruleSet.loweredFirstDiscardLimit && discardPile.isEmpty()) 5 else DEAL_LIMIT,
+                    currentDefender.hand.size)
+                if (currentAttacker.index != 0)
+                    currentAttacker.startTurn(trumpSuit, cardsRemaining(), players.map { it.hand.size }.toTypedArray())
             }
             DRAWING -> {
             }
@@ -364,17 +379,18 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             BEATING -> {
             }
             BEATEN -> {
-                val forcedFinish =
-                        if (currentDefender.hand.size == 0 || attackCards[throwLimit - 1] != null) {
-                            logger.debug("Forced to finish the turn")
-                            gameState = FINISHED
-                            true
-                        } else false
-                if (currentThrower.index != 0) {
-                    if (!forcedFinish)
-                        currentThrower.throwOrDone(attackCards, defenseCards, trumpSuit, cardsRemaining(), players.map { it.hand.size }.toTypedArray())
-                    else
+                val limitReached = currentDefender.hand.size == 0 ||
+                    attackCards.count { it != null } >= throwLimit
+                val waitingForHuman = currentThrower.index == 0 && currentDefender.index != 0 && !playerDoneStatuses[0]
+                if (limitReached && !waitingForHuman) {
+                    gameState = FINISHED
+                } else if (currentThrower.index != 0) {
+                    if (limitReached || TurnControls.botFinishesDefendedHumanTurn(
+                            currentDefender.index == 0, attackCards.count { it != null }, defenseCards.count { it != null })) {
                         currentThrower.sayDone()
+                    } else {
+                        currentThrower.throwOrDone(attackCards, defenseCards, trumpSuit, cardsRemaining(), players.map { it.hand.size }.toTypedArray())
+                    }
                 }
             }
             FINISHED -> {
@@ -412,6 +428,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         // Draw stage
         stage.act(delta)
         layoutHumanHand()
+        updateActionButtons()
         stage.draw()
         // Draw player labels
         game.batch.transformMatrix = stage.viewport.camera.view
@@ -775,8 +792,9 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         }
         if (event is Player.DoneEvent) {
             // Handle when player says done
-            playersSaidDone++
             val player = event.getTarget() as Player
+            if (playerDoneStatuses[player.index]) return true
+            playersSaidDone++
             if (!ruleSet.teamPlay) {
                 currentThrowerIndex = if (player.index == currentAttacker.index)
                     nextDefender.index else currentAttacker.index
@@ -867,10 +885,31 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             return players[currentThrowerIndex]
         }
 
+    private fun humanActions(): TurnControls.Actions = TurnControls.actions(
+        settled = gameState == READY || gameState == THROWN || gameState == BEATEN,
+        dragging = draggedCard != null,
+        attacks = attackCards.count { it != null }, defenses = defenseCards.count { it != null },
+        humanDefender = currentDefender.index == 0, humanThrower = currentThrower.index == 0,
+        taking = isPlayerTaking, alreadyDone = playerDoneStatuses[0]
+    )
+
+    private fun updateActionButtons() {
+        val actions = humanActions()
+        fun show(actor: com.badlogic.gdx.scenes.scene2d.Actor?, visible: Boolean) {
+            actor?.isVisible = visible
+            actor?.touchable = if (visible) Touchable.enabled else Touchable.disabled
+        }
+        show(takeButton,actions.take)
+        show(doneButton,actions.done)
+        show(giveButton,actions.give)
+    }
+
     private fun canDrag(actor: CardActor): Boolean =
         (gameState == READY || gameState == THROWN || gameState == BEATEN) &&
         players[0].hand.contains(actor.card) &&
-        (currentThrower.index == 0 || (currentDefender.index == 0 && !isPlayerTaking)) &&
+        ((currentThrower.index == 0 && !playerDoneStatuses[0] &&
+            attackCards.count { it != null } < throwLimit && currentDefender.hand.isNotEmpty()) ||
+            (currentDefender.index == 0 && !isPlayerTaking)) &&
         actor.actions.size == 0
 
     private fun onPlayingArea(x: Float,y: Float): Boolean = if (screenOrientationIsPortrait)
