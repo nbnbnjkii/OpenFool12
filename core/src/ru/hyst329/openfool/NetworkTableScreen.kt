@@ -125,6 +125,10 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
             else theme.label(stage,"Ваш ход — перетащите карту",20f,30f,440f,60f,22)
         }
         if(confirmExit) {
+            theme.image(stage,"pixel",0f,0f,480f,1000f).apply {
+                color=Color(0f,0f,0f,0.78f)
+                touchable=com.badlogic.gdx.scenes.scene2d.Touchable.enabled
+            }
             val overlay=theme.image(stage,"slate",20f,355f,440f,285f)
             overlay.touchable=com.badlogic.gdx.scenes.scene2d.Touchable.enabled
             theme.label(stage,"Сдаться и выйти из комнаты?",35f,535f,410f,75f,24).setWrap(true)
