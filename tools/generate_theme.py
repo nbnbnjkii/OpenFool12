@@ -56,3 +56,5 @@ import runpy
 runpy.run_path("tools/generate_buttons.py")
 
 runpy.run_path("tools/generate_theme_details.py")
+
+runpy.run_path("tools/generate_game_extras.py")

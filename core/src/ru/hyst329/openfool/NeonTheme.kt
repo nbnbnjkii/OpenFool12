@@ -74,5 +74,26 @@ internal class NeonTheme : Disposable {
         })
         stage.addActor(actor); return actor
     }
+    fun iconButton(stage: Stage, name: String, x: Float,y: Float,size: Float,action: () -> Unit): Actor {
+        val icon = image(stage,name,x,y,size,size)
+        icon.addListener(object : ClickListener() {
+            override fun clicked(event: InputEvent?, x: Float,y: Float) { action() }
+        })
+        return icon
+    }
+    fun timerRing(batch: Batch,cx: Float,cy: Float,radius: Float,seconds: Float) {
+        val pixel=texture("pixel")
+        val active=kotlin.math.ceil(seconds.coerceIn(0f,30f)/30f*60).toInt()
+        for (i in 0 until 60) {
+            val angle=90f-i*6f
+            val a=Math.toRadians(angle.toDouble())
+            batch.color=if (i < active) (if (seconds<=15f) Color.valueOf("ffc563") else Color.valueOf("60edbf")) else Color.valueOf("38445c")
+            batch.draw(pixel,cx+kotlin.math.cos(a).toFloat()*radius-1f,
+                cy+kotlin.math.sin(a).toFloat()*radius-3f,1f,3f,2f,6f,1f,1f,angle-90f,0,0,2,2,false,false)
+        }
+        batch.color=Color.WHITE
+        font(13).color=Color.WHITE
+        font(13).draw(batch,"${kotlin.math.ceil(seconds).toInt()}",cx+radius-4f,cy+radius+15f,30f,Align.center,false)
+    }
     override fun dispose() { textures.values.forEach { it.dispose() }; fonts.values.forEach { it.dispose() } }
 }

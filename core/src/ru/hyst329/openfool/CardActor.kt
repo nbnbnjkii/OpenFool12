@@ -31,6 +31,11 @@ internal class CardActor(game: OpenFoolGame, val card: Card, deckStyle: String) 
         sprite.draw(batch!!, alpha)
     }
 
+    // Paid hint affects only actors still in the human hand, never opponent or table cards.
+    fun setHint(enabled: Boolean) {
+        face.color = if (enabled) com.badlogic.gdx.graphics.Color(0.65f,1f,0.76f,1f) else com.badlogic.gdx.graphics.Color.WHITE
+    }
+
     fun containsStagePoint(stageX: Float, stageY: Float): Boolean {
         val p = stageToLocalCoordinates(com.badlogic.gdx.math.Vector2(stageX,stageY))
         return p.x >= 0f && p.x <= width && p.y >= 0f && p.y <= height

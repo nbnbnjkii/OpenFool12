@@ -33,6 +33,8 @@ class OpenFoolGame(val orientationHelper: OrientationHelper) : Game() {
     internal var font: BitmapFont by Delegates.notNull()
     internal var smallFont: BitmapFont by Delegates.notNull()
     internal var preferences: Preferences by Delegates.notNull()
+    internal lateinit var economy: GameEconomy
+    private val queuedDecks = HashSet<String>()
     internal var localeBundle: I18NBundle by Delegates.notNull()
 
     override fun create() {
@@ -58,6 +60,7 @@ class OpenFoolGame(val orientationHelper: OrientationHelper) : Game() {
 
         VisUI.load(Gdx.files.internal("ui/temp-skin.json"))
         preferences = Gdx.app.getPreferences("OpenFool")
+        economy = GameEconomy(preferences)
         Gdx.input.isCatchBackKey = true
         // Deal with localisation
         var localeString: String? = preferences.getString("Language", null)
@@ -74,17 +77,9 @@ class OpenFoolGame(val orientationHelper: OrientationHelper) : Game() {
         val param: TextureLoader.TextureParameter = TextureLoader.TextureParameter()
         param.minFilter = Texture.TextureFilter.MipMap
         param.genMipMaps = true
-        val decks = arrayOf("fra", "int", "rus", "psu")
-        val suits = "cdhs"
+        // Only the selected deck is queued; other styles load on demand in settings.
+        queueDeck(preferences.getString(SettingsScreen.DECK,"rus"))
         val fullSuits = arrayOf("clubs", "diamonds", "hearts", "spades")
-        for (d in decks) {
-            for (i in 1..13) {
-                for (s in suits.toCharArray()) {
-                    assetManager.load("decks/$d/$i$s.png", Texture::class.java, param)
-                }
-            }
-            assetManager.load("decks/$d/back.png", Texture::class.java, param)
-        }
         for (i in 1..2) {
             assetManager.load("backgrounds/background$i.png", Texture::class.java, param)
         }
@@ -95,6 +90,19 @@ class OpenFoolGame(val orientationHelper: OrientationHelper) : Game() {
         assetManager.load("holidays/santahat.png", Texture::class.java, param)
         this.setScreen(MainMenuScreen(this))
     }
+
+    private fun queueDeck(style: String) {
+        val deck = if (style in listOf("rus","int","fra","psu")) style else "rus"
+        if (!queuedDecks.add(deck)) return
+        val p=TextureLoader.TextureParameter()
+        p.genMipMaps=true; p.minFilter=Texture.TextureFilter.MipMapLinearLinear
+        p.magFilter=Texture.TextureFilter.Linear
+        for (rank in 1..13) for (suit in "cdhs")
+            assetManager.load("decks/$deck/$rank$suit.png",Texture::class.java,p)
+        assetManager.load("decks/$deck/back.png",Texture::class.java,p)
+    }
+    internal fun ensureDeck(style: String) { queueDeck(style); assetManager.finishLoading() }
+    internal fun ensureGameAssets() { ensureDeck(preferences.getString(SettingsScreen.DECK,"rus")) }
 
     override fun dispose() {
         batch.dispose()

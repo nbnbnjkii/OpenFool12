@@ -99,3 +99,33 @@ All hand-card gray/green tinting and hover-target highlights have been removed.
 Cards retain their original deck colors. Automatic legal defense targeting,
 passing rules, and invalid-drop return behavior are unchanged. This supersedes
 the earlier descriptions of target highlighting and a fully visible fan.
+
+## Local wallet, decision clock and paid tools (0.7.0)
+
+- One-time local welcome balance: 10,000 coins and 20 crystals. Persisted in
+  OpenFool preferences, not replenished by reopening a menu or restarting.
+- A 30-second ring surrounds the active avatar. A generated three-beep WAV
+  sounds once when 15 seconds remain. Animation time and app suspension do
+  not consume a decision. At timeout, an undefended human takes; a human
+  throwing finishes; the first attack can be selected automatically.
+- Three icon-only buttons next to the human: undo (2 crystals each successful
+  use), discard viewer (3 crystals to unlock for this game), hints (1 crystal
+  to unlock for this game). The two unlocks reset on a new game, not when a
+  modal is dismissed. Insufficient funds never unlock or charge an action.
+- Paid undo is available for 3 seconds after the last human card. Bots cannot
+  respond during this interval. Undo restores the exact hand, attack/defense
+  arrays, attacker/thrower, done statuses, taking flag and rule state. It cannot
+  undo a bot response, finished round, or revealed deal. Invalid undo is free.
+- The discard modal shows ONLY cards in the actual discard pile, never cards
+  collected by a player. Any tap or Back closes it without reaching underlying
+  game controls. The decision clock continues while it is open.
+- Hints tint ONLY legal cards in the human hand. No opponent/target highlight.
+- Removed the lobby's card-loading indicator and disabled-button wait gate.
+  Only the selected deck is queued instead of all four. Other deck styles
+  load on demand in settings. Necessary assets are finalized on entering a
+  game; a first-launch resource decode can still take time on slower devices.
+
+Manual checks: restart after spending; open/close the discard modal repeatedly;
+try every tool with insufficient funds; undo throws/defenses/transfers; verify
+warning at 15 seconds and timeout at 30; verify the panel cannot leak a tap.
+No real-money purchases or network balance are implemented.

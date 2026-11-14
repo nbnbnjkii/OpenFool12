@@ -47,7 +47,24 @@ import kotlin.math.min
 private val logger = KotlinLogging.logger {}
 
 class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
+    private val assetsReady = game.ensureGameAssets()
     private val neon = NeonTheme()
+    private val perks = GamePerks(game.economy)
+    private val clock = DecisionTimer()
+    private var decisionSerial = 0
+    private var discardModal = false
+    private var message = ""
+    private var messageSeconds = 0f
+    private var skipClockFrame = false
+    private val warningSound = try { Gdx.audio.newSound(Gdx.files.internal("audio/turn_warning.wav")) }
+        catch (error: Exception) { Gdx.app.error("TurnTimer","Warning sound unavailable",error); null }
+    private var undoButton: com.badlogic.gdx.scenes.scene2d.Actor? = null
+    private var undoWindow = 0f
+    private var lastUndo: UndoState? = null
+    private data class UndoState(val card: Card, val hand: List<Card>, val attacks: Array<Card?>,
+        val defenses: Array<Card?>, val attacker: Int, val thrower: Int, val saidDone: Int,
+        val done: BooleanArray, val taking: Boolean, val state: GameState, val limit: Int)
+
     private val dragLayer = Group()
     private var takeButton: com.badlogic.gdx.scenes.scene2d.Actor? = null
     private var doneButton: com.badlogic.gdx.scenes.scene2d.Actor? = null
@@ -316,6 +333,16 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 }
                 updateActionButtons()
             }
+            undoButton = neon.iconButton(stage,"perk_undo",102f,64f,29f) { undoLastCard() }
+            neon.iconButton(stage,"perk_discard",102f,33f,29f) {
+                if (perks.unlockDiscard()) openDiscard() else toast("Недостаточно кристаллов: просмотр стоит 3")
+            }
+            neon.iconButton(stage,"perk_hint",102f,2f,29f) {
+                val already = perks.highlightEnabled
+                if (perks.unlockHighlight()) toast(if (already) "Подсветка уже активна на эту партию" else "Подсветка на партию включена: -1 кристалл")
+                else toast("Недостаточно кристаллов: подсветка стоит 1")
+            }
+            neon.label(stage,"Возврат: 2  •  Отбой: 3  •  Подсветка: 1",105f,912f,360f,24f,13,Color.valueOf("a8b9d3"))
             updateActionButtons()
             neon.button(stage,"МЕНЮ","slate",15f,920f,80f,46f,16) {
                 game.screen = MainMenuScreen(game); dispose()
@@ -330,8 +357,17 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     override fun render(delta: Float) {
         if (Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.BACK) ||
             Gdx.input.isKeyJustPressed(com.badlogic.gdx.Input.Keys.ESCAPE)) {
+            if (discardModal) { closeDiscard(); return }
             game.screen = MainMenuScreen(game); dispose(); return
         }
+        val step = if (skipClockFrame) 0f else delta.coerceAtLeast(0f)
+        skipClockFrame = false
+        messageSeconds = (messageSeconds-step).coerceAtLeast(0f)
+        undoWindow = (undoWindow-step).coerceAtLeast(0f)
+        if (undoWindow == 0f) lastUndo = null
+        val tick = clock.tick(decisionOwner(),decisionSerial,step)
+        if (tick.warning) warningSound?.play(0.8f)
+        if (tick.timeout) onDecisionTimeout()
         Gdx.gl.glClearColor(backgroundColor.r, backgroundColor.g, backgroundColor.b, backgroundColor.a)
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
         val opponents =
@@ -349,7 +385,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             logger.debug("Game state is $gameState")
             oldGameState = gameState
         }
-        when (gameState) {
+        // Three seconds after a human card are reserved for paid undo. No bot can reveal a reply meanwhile.
+        if (undoWindow <= 0f) when (gameState) {
             READY -> {
                 throwLimit = min(if (ruleSet.loweredFirstDiscardLimit && discardPile.isEmpty()) 5 else DEAL_LIMIT,
                     currentDefender.hand.size)
@@ -424,7 +461,9 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         // Draw stage
         stage.act(delta)
         layoutHumanHand()
+        updateHandHints()
         updateActionButtons()
+        undoButton?.color = if (lastUndo != null && undoWindow > 0f) Color.WHITE else Color(0.45f,0.45f,0.55f,1f)
         stage.draw()
         // Draw player labels
         game.batch.transformMatrix = stage.viewport.camera.view
@@ -436,11 +475,16 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 val y = when (i) { 0 -> 20f; 1 -> 825f; 2, 3 -> 635f; else -> 370f }
                 val size = if (i == 0) 66f else 64f
                 game.batch.draw(neon.texture(if (i == 0) "avatar" else "bot"),x,y,size,size)
+                if (decisionOwner() == i) neon.timerRing(game.batch,x+size/2,y+size/2,size/2+7f,clock.remaining)
                 val f = neon.font(17)
                 f.color = if (currentDefender.index == i || currentThrower.index == i) Color.valueOf("6bffce") else Color.WHITE
                 f.draw(game.batch,players[i].name,x-12f,y-3f,90f,com.badlogic.gdx.utils.Align.center,false)
                 if (i > 0) f.draw(game.batch,"${players[i].hand.size} карт",x-12f,y-25f,90f,com.badlogic.gdx.utils.Align.center,false)
             }
+            neon.font(14).color = Color.WHITE
+            neon.font(14).draw(game.batch,"${game.economy.coins} монет  •  ${game.economy.crystals} кристаллов",130f,958f,335f,com.badlogic.gdx.utils.Align.right,false)
+            if (messageSeconds > 0f) neon.font(14).draw(game.batch,message,15f,276f,450f,com.badlogic.gdx.utils.Align.center,true)
+            else if (undoWindow > 0f) neon.font(14).draw(game.batch,"Возврат карты: 2 кристалла (${kotlin.math.ceil(undoWindow).toInt()} с)",15f,276f,450f,com.badlogic.gdx.utils.Align.center,false)
             neon.font(20).draw(game.batch,"${cardsRemaining()}",388f,778f)
             val hint = if (isPlayerTaking) "${currentDefender.name} берёт" else if (currentDefender.index == 0) if (ruleSet.allowPass) "Тяните на стол — отбой или перевод" else "Тяните на стол — карта сама найдёт цель" else if (currentThrower.index == 0) "Перетащите карту на стол" else "Ход соперника"
             neon.font(15).draw(game.batch,hint,0f,340f,480f,com.badlogic.gdx.utils.Align.center,false)
@@ -481,6 +525,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             game.font.draw(game.batch, turnString, stage.viewport.worldWidth / 40f, stage.viewport.worldHeight / 4.8f)
         }
         }
+        if (discardModal) drawDiscardModal()
         game.batch.end()
         // Check if the game is over
         if (isGameOver) {
@@ -504,11 +549,12 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     }
 
     override fun pause() {
+        skipClockFrame = true
         stage.cancelTouchFocus()
     }
 
     override fun resume() {
-
+        skipClockFrame = true
     }
 
     override fun hide() {
@@ -516,11 +562,13 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     }
 
     override fun dispose() {
+        warningSound?.dispose()
         stage.dispose()
         neon.dispose()
     }
 
     private fun endTurn(playerIndex: Int) {
+        lastUndo = null; undoWindow = 0f; decisionSerial++
         playersSaidDone = 0
         playerDoneStatuses = BooleanArray(ruleSet.playerCount)
         val tableCards = ArrayList<Card>()
@@ -617,6 +665,14 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     }
 
     override fun handle(event: Event): Boolean {
+        if (event is Player.CardThrownEvent || event is Player.CardBeatenEvent ||
+            event is Player.CardPassedEvent || event is Player.TakeEvent || event is Player.DoneEvent) {
+            decisionSerial++
+            val source = event.target as? Player
+            if (source?.index != 0 || event is Player.TakeEvent || event is Player.DoneEvent) {
+                lastUndo = null; undoWindow = 0f
+            }
+        }
         if (event is Player.CardThrownEvent) {
             gameState = THROWING
             // Handle when card is thrown
@@ -851,6 +907,118 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             return players[currentThrowerIndex]
         }
 
+    private fun toast(text: String) { message = text; messageSeconds = 4f }
+
+    private fun decisionOwner(): Int = when (gameState) {
+        READY -> currentAttacker.index
+        THROWN -> if (isPlayerTaking) currentThrower.index else currentDefender.index
+        BEATEN -> currentThrower.index
+        else -> -1
+    }
+
+    private fun onDecisionTimeout() {
+        val owner = decisionOwner()
+        if (owner < 0) return
+        stage.cancelTouchFocus()
+        closeDiscard()
+        lastUndo = null; undoWindow = 0f
+        val player = players[owner]
+        if (gameState == THROWN && !isPlayerTaking) player.sayTake()
+        else if (attackCards.any { it != null }) {
+            player.sayDone()
+            if (owner == 0) gameState = FINISHED
+        } else {
+            player.startTurn(trumpSuit,cardsRemaining(),players.map { it.hand.size }.toTypedArray())
+        }
+        if (owner == 0) toast("Время вышло: ход выполнен автоматически")
+    }
+
+    private fun undoLastCard() {
+        val saved = lastUndo
+        if (saved == null || undoWindow <= 0f || draggedCard != null || discardModal) {
+            toast("Возврат доступен 3 секунды после вашей карты"); return
+        }
+        if (!perks.payUndo()) { toast("Недостаточно кристаллов: возврат стоит 2"); return }
+        val actor = cardActors[saved.card]!!
+        actor.clearActions()
+        playerGroups[0].addActor(actor)
+        actor.isFaceUp = true
+        players[0].hand.clear(); players[0].hand.addAll(saved.hand)
+        attackCards = saved.attacks.clone(); defenseCards = saved.defenses.clone()
+        currentAttackerIndex = saved.attacker; currentThrowerIndex = saved.thrower
+        playersSaidDone = saved.saidDone; playerDoneStatuses = saved.done.clone()
+        isPlayerTaking = saved.taking; throwLimit = saved.limit
+        gameState = saved.state; oldGameState = saved.state
+        lastUndo = null; undoWindow = 0f; decisionSerial++
+        layoutHumanHand(); updateActionButtons()
+        toast("Карта возвращена: -2 кристалла")
+    }
+
+    private fun updateHandHints() {
+        for (actor in cardActors.values) actor.setHint(false)
+        if (!perks.highlightEnabled || discardModal) return
+        val user = players[0]
+        for (card in user.hand) {
+            val actor = cardActors[card] ?: continue
+            if (!canDrag(actor)) continue
+            val legal = if (currentDefender === user)
+                user.defenseTarget(card,attackCards,defenseCards,trumpSuit) != null ||
+                    user.cardCanBePassed(card,attackCards,defenseCards,nextDefender.hand.size)
+                else user.cardCanBeThrown(card,attackCards,defenseCards)
+            actor.setHint(legal)
+        }
+    }
+
+    private fun openDiscard() {
+        stage.cancelTouchFocus()
+        discardModal = true
+        Gdx.input.inputProcessor = object : com.badlogic.gdx.InputAdapter() {
+            override fun touchDown(x: Int,y: Int,pointer: Int,button: Int): Boolean {
+                closeDiscard(); return true
+            }
+            override fun keyDown(keycode: Int): Boolean {
+                if (keycode == com.badlogic.gdx.Input.Keys.BACK || keycode == com.badlogic.gdx.Input.Keys.ESCAPE) closeDiscard()
+                return true
+            }
+        }
+    }
+
+    private fun closeDiscard() {
+        if (!discardModal) return
+        discardModal = false
+        Gdx.input.inputProcessor = stage
+    }
+
+    private fun drawDiscardModal() {
+        val batch = game.batch
+        val w = stage.viewport.worldWidth
+        val h = stage.viewport.worldHeight
+        batch.color = Color(0f,0f,0f,0.82f)
+        batch.draw(neon.texture("pixel"),0f,0f,w,h)
+        batch.color = Color.valueOf("17243f")
+        batch.draw(neon.texture("pixel"),20f,110f,w-40f,h-220f)
+        batch.color = Color.WHITE
+        neon.font(23).color = Color.WHITE
+        neon.font(23).draw(batch,"ОТБОЙ: ${discardPile.size} карт",30f,h-135f,w-60f,com.badlogic.gdx.utils.Align.center,false)
+        neon.font(15).color = Color.WHITE
+        neon.font(15).draw(batch,"Нажмите в любом месте, чтобы закрыть",25f,140f,w-50f,com.badlogic.gdx.utils.Align.center,false)
+        if (discardPile.isEmpty()) {
+            neon.font(21).draw(batch,"В отбое пока нет карт",30f,h/2,w-60f,com.badlogic.gdx.utils.Align.center,false)
+            return
+        }
+        val columns = if (screenOrientationIsPortrait) 7 else 13
+        val rows = (discardPile.size+columns-1)/columns
+        val cw = kotlin.math.min((w-80f)/columns-6f,(h-340f)/rows/1.5f-4f)
+        val ch = cw*1.5f
+        val left = (w-(cw+6f)*columns)/2f
+        val style = game.preferences.getString(SettingsScreen.DECK,"rus")
+        for ((i,card) in discardPile.withIndex()) {
+            val x = left+(i%columns)*(cw+6f)
+            val y = h-185f-ch-(i/columns)*(ch+6f)
+            batch.draw(game.assetManager.get("decks/$style/$card.png",Texture::class.java),x,y,cw,ch)
+        }
+    }
+
     private fun humanActions(): TurnControls.Actions = TurnControls.actions(
         settled = gameState == READY || gameState == THROWN || gameState == BEATEN,
         dragging = draggedCard != null,
@@ -889,6 +1057,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     private fun playDroppedCard(actor: CardActor,x: Float,y: Float) {
         val user = players[0]
         val card = actor.card
+        val snapshot = UndoState(card,user.hand.toList(),attackCards.clone(),defenseCards.clone(),
+            currentAttackerIndex,currentThrowerIndex,playersSaidDone,playerDoneStatuses.clone(),isPlayerTaking,gameState,throwLimit)
         if (currentDefender === user && !isPlayerTaking) {
             val preferred = attackAt(x,y)
             if (preferred == null && !onPlayingArea(x,y)) return
@@ -901,6 +1071,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         } else if (currentThrower === user && onPlayingArea(x,y)) {
             user.throwCard(card,attackCards,defenseCards,trumpSuit)
         }
+        if (!user.hand.contains(card)) { lastUndo = snapshot; undoWindow = 3f }
     }
 
     private fun layoutHumanHand() {

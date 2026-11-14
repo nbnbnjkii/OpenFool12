@@ -277,6 +277,7 @@ internal class SettingsScreen(private val game: OpenFoolGame) : Screen {
     }
 
     private fun updateSprites() {
+        game.ensureDeck(deck ?: "rus")
         back = Sprite(game.assetManager.get(
                 String.format("decks/%s/back.png", deck), Texture::class.java))
         ace = Sprite(game.assetManager.get(
