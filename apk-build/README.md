@@ -75,3 +75,14 @@ invalid drops at the rules boundary, fully covered tables, and fan geometry.
   over the pile; the incorrect БИТО label is not used for an unblocked pile.
 - Explicit human confirmation remains available at the throw limit or when
   the defending bot has used its last card. Hidden controls are not touchable.
+
+## Automatic drop targeting (0.6.2)
+
+A defensive drop anywhere in the play area automatically covers a legal,
+uncovered attack. A legal card directly under the pointer takes priority;
+otherwise the first legal open attack is selected. Hover highlighting and
+release use the same target policy. A card cannot cover an already covered
+attack, the wrong suit, or a higher card. If no defense is legal, passing is
+attempted in passing mode; otherwise the card returns to the hand. Drops
+outside the play area (unless directly on an open attack) remain canceled.
+This supersedes the earlier exact-target-only and empty-space-transfer controls.

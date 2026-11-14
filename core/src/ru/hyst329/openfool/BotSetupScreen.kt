@@ -56,7 +56,7 @@ internal class BotSetupScreen(private val game: OpenFoolGame) : Screen {
                 rules.allowPass = pass; refresh()
             }
         }
-        val help = theme.label(stage,"Перевод: перетащите карту того же ранга на свободное место стола.\nПереводить можно только до начала отбоя.",25f,238f,430f,85f,17,Color.valueOf("b6c0dc"))
+        val help = theme.label(stage,"Тяните карту на стол: сначала отбой, иначе перевод картой того же ранга.\nПереводить можно только до начала отбоя.",25f,238f,430f,85f,17,Color.valueOf("b6c0dc"))
         help.setWrap(true)
         notice = theme.label(stage,"",20f,184f,440f,45f,16,Color.valueOf("ffcf71"))
         summary = theme.label(stage,"",20f,131f,440f,40f,18,Color.valueOf("83f5c5"))

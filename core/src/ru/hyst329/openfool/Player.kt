@@ -305,6 +305,14 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
         return hand.contains(c) && c.beats(attack, trumpSuit, ruleSet.deuceBeatsAce)
     }
 
+    /** Respect a legal direct drop; otherwise select the first uncovered card this card can beat. */
+    internal fun defenseTarget(c: Card, attackCards: Array<Card?>, defenseCards: Array<Card?>,
+                               trumpSuit: Suit, preferredIndex: Int? = null): Int? {
+        if (preferredIndex != null && cardCanBeBeaten(c,attackCards,defenseCards,trumpSuit,preferredIndex))
+            return preferredIndex
+        return attackCards.indices.firstOrNull { cardCanBeBeaten(c,attackCards,defenseCards,trumpSuit,it) }
+    }
+
     fun beatWithCard(c: Card,
                      attackCards: Array<Card?>,
                      defenseCards: Array<Card?>,

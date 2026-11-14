@@ -446,7 +446,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 if (i > 0) f.draw(game.batch,"${players[i].hand.size} карт",x-12f,y-25f,90f,com.badlogic.gdx.utils.Align.center,false)
             }
             neon.font(20).draw(game.batch,"${cardsRemaining()}",388f,778f)
-            val hint = if (isPlayerTaking) "${currentDefender.name} берёт" else if (currentDefender.index == 0) if (ruleSet.allowPass) "На карту — отбой; на стол — перевод" else "Перетащите карту на ту, которую отбиваете" else if (currentThrower.index == 0) "Перетащите карту на стол" else "Ход соперника"
+            val hint = if (isPlayerTaking) "${currentDefender.name} берёт" else if (currentDefender.index == 0) if (ruleSet.allowPass) "Тяните на стол — отбой или перевод" else "Тяните на стол — карта сама найдёт цель" else if (currentThrower.index == 0) "Перетащите карту на стол" else "Ход соперника"
             neon.font(15).draw(game.batch,hint,0f,340f,480f,com.badlogic.gdx.utils.Align.center,false)
         } else {
         for (i in 0 until ruleSet.playerCount) {
@@ -925,11 +925,14 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     private fun updateDropHighlight(actor: CardActor,x: Float,y: Float) {
         clearDropHighlight()
         if (currentDefender.index != 0) return
-        val index = attackAt(x,y) ?: return
+        val preferred = attackAt(x,y)
+        if (preferred == null && !onPlayingArea(x,y)) return
         val user = players[0]
-        if (user.cardCanBeBeaten(actor.card,attackCards,defenseCards,trumpSuit,index) ||
-            user.cardCanBePassed(actor.card,attackCards,defenseCards,nextDefender.hand.size)) {
-            highlightedTarget = cardActors[attackCards[index]]
+        val target = user.defenseTarget(actor.card,attackCards,defenseCards,trumpSuit,preferred)
+            ?: if (user.cardCanBePassed(actor.card,attackCards,defenseCards,nextDefender.hand.size))
+                preferred ?: attackCards.indices.firstOrNull { attackCards[it] != null } else null
+        if (target != null) {
+            highlightedTarget = cardActors[attackCards[target]]
             highlightedTarget?.tint(Color.valueOf("9affc5"))
         }
     }
@@ -938,11 +941,12 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         val user = players[0]
         val card = actor.card
         if (currentDefender === user && !isPlayerTaking) {
-            val target = attackAt(x,y)
-            if (target != null && user.cardCanBeBeaten(card,attackCards,defenseCards,trumpSuit,target)) {
+            val preferred = attackAt(x,y)
+            if (preferred == null && !onPlayingArea(x,y)) return
+            val target = user.defenseTarget(card,attackCards,defenseCards,trumpSuit,preferred)
+            if (target != null) {
                 user.beatWithCard(card,attackCards,defenseCards,trumpSuit,target)
-            } else if ((target != null || onPlayingArea(x,y)) &&
-                user.cardCanBePassed(card,attackCards,defenseCards,nextDefender.hand.size)) {
+            } else if (user.cardCanBePassed(card,attackCards,defenseCards,nextDefender.hand.size)) {
                 user.passWithCard(card,attackCards,defenseCards,nextDefender.hand.size)
             }
         } else if (currentThrower === user && onPlayingArea(x,y)) {
