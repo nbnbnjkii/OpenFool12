@@ -87,6 +87,11 @@ internal class SettingsScreen(private val game: OpenFoolGame) : Screen {
             }
             theme.label(stage,"${i+1}",x,y-26f,72f,24f,15)
         }
+        theme.button(stage,"ВЫЙТИ ИЗ АККАУНТА","slate",40f,181f,400f,52f,20) {
+            game.online.logout()
+            game.screen=AuthScreen(game,false)
+            dispose()
+        }
         moveToPage(first,profilePage)
         first=stage.actors.size
         theme.label(stage,"КАРТЫ",20f,766f,440f,35f,20,Color.valueOf("aebbd3"))
@@ -156,7 +161,10 @@ internal class SettingsScreen(private val game: OpenFoolGame) : Screen {
         game.localeBundle=game.assetManager.get("i18n/OpenFool",I18NBundle::class.java)
         stage.keyboardFocus=null
         Gdx.input.setOnscreenKeyboardVisible(false)
-        status.setText("Профиль и настройки сохранены")
+        status.setText("Сохранено на телефоне. Синхронизация...")
+        game.online.request("PUT","/me",jsonObject("nickname" to normalized,"avatar" to avatar),{
+            if(game.screen===this)status.setText("Профиль и настройки сохранены")
+        },{ message -> if(game.screen===this)status.setText("На телефоне сохранено. $message") })
     }
     private fun back() {
         Gdx.input.setOnscreenKeyboardVisible(false)

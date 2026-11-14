@@ -25,6 +25,9 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
     private lateinit var status: Label
     private var selectedTab=0
     private var message=""
+    private var inviteElapsed=0f
+    private var inviteBusy=false
+    private var alive=true
     init {
         Gdx.input.inputProcessor=stage
         game.orientationHelper.requestOrientation(OrientationHelper.Orientation.PORTRAIT)
@@ -67,7 +70,7 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
         sectionTitle=theme.label(stage,"",25f,699f,430f,70f,32)
         sectionText=theme.label(stage,"",35f,430f,410f,220f,22,Color.valueOf("aab8d2"))
         sectionText.setWrap(true)
-        friendAction=theme.button(stage,"СОЗДАТЬ ИГРУ","purple",25f,300f,430f,82f,25) { setup(MatchMode.FRIENDS) }
+        friendAction=theme.button(stage,"СПИСОК ДРУЗЕЙ","purple",25f,300f,430f,82f,25) { game.screen=FriendsScreen(game);dispose() }
         theme.image(stage,"hud_panel",0f,0f,480f,100f)
         val names=listOf("Главная","Магазин","Друзья","Задания","Лидеры")
         val icons=listOf("ui_home","ui_shop","ui_friends","ui_tasks","ui_trophy")
@@ -81,7 +84,7 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
         }
         selectTab(0)
     }
-    private fun setup(mode: MatchMode) { game.screen=BotSetupScreen(game,mode);dispose() }
+    private fun setup(mode: MatchMode) { game.screen=if(mode==MatchMode.FRIENDS) FriendSetupScreen(game) else BotSetupScreen(game,mode);dispose() }
     private fun selectTab(index: Int) {
         selectedTab=index
         home.isVisible=index==0
@@ -89,7 +92,7 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
         friendAction.isVisible=index==2
         val titles=listOf("","МАГАЗИН","ДРУЗЬЯ","ЗАДАНИЯ","ЛИДЕРЫ")
         val descriptions=listOf("", "${game.economy.coins} монет • ${game.economy.crystals} кристаллов\n\nПокупки и пополнение пока недоступны.",
-            "Настройте ставку и правила игры с другом.\n\nСетевые комнаты и приглашения пока не реализованы.",
+            "Создайте стол или введите код комнаты. До 6 живых игроков. Боты — только по вашему выбору.\n\nЗапросы в друзья принимаются в списке ниже.",
             "Задания и награды появятся в следующем обновлении.",
             "Таблица лидеров пока недоступна. Онлайн-рейтинг не подключён.")
         sectionTitle.setText(titles[index]);sectionText.setText(descriptions[index])
@@ -99,6 +102,16 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
         }
     }
     override fun render(delta: Float) {
+        inviteElapsed+=delta
+        if(inviteElapsed>5f&&!inviteBusy&&game.online.token.isNotEmpty()) {
+            inviteElapsed=0f;inviteBusy=true
+            game.online.request("GET","/invites",null,{result ->
+                inviteBusy=false
+                if(alive&&game.screen===this&&result.get("invites").size>0){
+                    game.screen=InvitationScreen(game,result.get("invites").get(0));dispose()
+                }
+            },{inviteBusy=false})
+        }
         game.assetManager.update(3)
         status.setText(message)
         Gdx.gl.glClearColor(0.07f,0.08f,0.17f,1f);Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT)
@@ -108,7 +121,7 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
         }
     }
     override fun resize(width: Int,height: Int) { stage.viewport.update(width,height,true) }
-    override fun dispose() { stage.dispose();theme.dispose() }
+    override fun dispose() { alive=false;stage.dispose();theme.dispose() }
     override fun show() {}
     override fun hide() {}
     override fun pause() {}

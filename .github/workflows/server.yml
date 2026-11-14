@@ -1,0 +1,17 @@
+name: Server tests
+on:
+  push:
+    branches: ['arena/2937ce90-openfool12']
+    paths: ['server/**', '.github/workflows/server.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm test --prefix server

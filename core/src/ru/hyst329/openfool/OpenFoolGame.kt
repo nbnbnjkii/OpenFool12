@@ -33,6 +33,7 @@ class OpenFoolGame(val orientationHelper: OrientationHelper) : Game() {
     internal var font: BitmapFont by Delegates.notNull()
     internal var smallFont: BitmapFont by Delegates.notNull()
     internal var preferences: Preferences by Delegates.notNull()
+    internal lateinit var online: OnlineApi
     internal lateinit var economy: GameEconomy
     private val queuedDecks = HashSet<String>()
     internal var localeBundle: I18NBundle by Delegates.notNull()
@@ -61,6 +62,7 @@ class OpenFoolGame(val orientationHelper: OrientationHelper) : Game() {
         VisUI.load(Gdx.files.internal("ui/temp-skin.json"))
         preferences = Gdx.app.getPreferences("OpenFool")
         economy = GameEconomy(preferences)
+        online = OnlineApi(this)
         Gdx.input.isCatchBackKey = true
         // Deal with localisation
         var localeString: String? = preferences.getString("Language", null)
@@ -88,7 +90,7 @@ class OpenFoolGame(val orientationHelper: OrientationHelper) : Game() {
         }
         assetManager.load("holidays/hammersickle.png", Texture::class.java, param)
         assetManager.load("holidays/santahat.png", Texture::class.java, param)
-        this.setScreen(MainMenuScreen(this))
+        this.setScreen(AuthScreen(this))
     }
 
     private fun queueDeck(style: String) {
@@ -106,8 +108,14 @@ class OpenFoolGame(val orientationHelper: OrientationHelper) : Game() {
 
     /** Android legacy/predictive-back fallback: all table dialogs run on the GL thread. */
     fun handleTableBack(): Boolean {
-        val table=screen as? GameScreen ?: return false
-        Gdx.app.postRunnable { if (screen===table) table.onPlatformBack() }
+        val current=screen
+        if (current !is GameScreen && current !is NetworkTableScreen) return false
+        Gdx.app.postRunnable {
+            if (screen===current) when(current) {
+                is GameScreen -> current.onPlatformBack()
+                is NetworkTableScreen -> current.onPlatformBack()
+            }
+        }
         return true
     }
 

@@ -118,3 +118,8 @@ Thumbs.db
 /apk-build/build/
 /apk-build/.gradle/
 /apk-build/local.properties
+
+# Server account/session database and local backups
+/server/data/
+/server/*.sqlite*
+/server/.env
