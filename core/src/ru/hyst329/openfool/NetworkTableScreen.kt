@@ -18,6 +18,7 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
     private var confirmExit=false
     private var passCard=false
     private var animateDeal=false
+    private var discardOpen=false
     private var serverOffset=room.getLong("serverTime")-System.currentTimeMillis()
     private var warnedDeadline=0L
     private val warningSound=try {Gdx.audio.newSound(Gdx.files.internal("audio/turn_warning.wav"))} catch(_:Exception){null}
@@ -31,7 +32,7 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
         }
     }
     private fun command(path: String,extra: Array<Pair<String,Any>> = emptyArray()) {
-        call("POST",path,jsonObject("code" to code,*extra)){updateRoom(it)}
+        call("POST",path,jsonObject("code" to code,"economyVersion" to 1,*extra)){updateRoom(it)}
     }
     private fun build() {
         base("")
@@ -109,7 +110,7 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
             actor.addListener(object : InputListener() {
                 var originalZ=0
                 override fun touchDown(event: InputEvent,x: Float,y: Float,pointer: Int,button: Int): Boolean {
-                    if(busy||dragging||actor.actions.size>0||confirmExit||phase!="playing"||turn!=own||pointer!=0)return false
+                    if(busy||dragging||locked()||discardOpen||actor.actions.size>0||confirmExit||phase!="playing"||turn!=own||pointer!=0)return false
                     originalZ=actor.zIndex;dragging=true;actor.toFront();actor.rotation=0f
                     actor.setPosition(event.stageX-actor.width/2,event.stageY-actor.height/2)
                     return true
@@ -146,9 +147,17 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
         else if(actions.done||actions.give)theme.button(stage,if(actions.give)"ОТДАТЬ" else "БИТО","green",12f,28f,177f,62f,26){command("/rooms/action",arrayOf("type" to "done"))}
         else if(TurnControls.showYourTurn(actions,turn==own,phase=="playing"&&!me.getBoolean("out"),room.getBoolean("taking")&&own==defender,false))slot="Ваш ход"
         if(phase=="playing"&&actions.take&&room.getBoolean("pass"))theme.button(stage,if(passCard)"ПЕРЕВОД: ДА" else "ПЕРЕВОД: НЕТ","slate",12f,310f,177f,38f,16){passCard=!passCard;build()}
-        // Same positions and artwork, but never pretend paid offline tools work online.
+        // The server validates ownership, unlock state, cost and undo deadline.
         if(phase=="playing"&&!me.getBoolean("out"))for((index,icon) in listOf("perk_undo","perk_discard","perk_hint").withIndex()) {
-            theme.iconButton(stage,icon,309f+index*58f,40f,44f){status.setText("Этот инструмент пока доступен только в игре с ботами. Списаний нет.")}.color=Color(0.45f,0.45f,0.55f,1f)
+            theme.iconButton(stage,icon,309f+index*58f,40f,44f){
+                if(!busy) {
+                    val type=listOf("undo","discard","highlight")[index]
+                    call("POST","/rooms/perk",jsonObject("code" to code,"type" to type)) {
+                        updateRoom(it)
+                        if(type=="discard"){discardOpen=true;build()}
+                    }
+                }
+            }.apply { if(index==0&&room.getLong("undoUntil",0L)<=System.currentTimeMillis()+serverOffset)color=Color(0.45f,0.45f,0.55f,1f) }
         }
         val slotText=slot
         stage.addActor(object : Actor() {
@@ -166,6 +175,21 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
                 theme.font(14).draw(batch,me.getString("name").take(10),198f,18f,90f,com.badlogic.gdx.utils.Align.center,false)
             }
         })
+        if(discardOpen) {
+            val cards=room.get("discard")
+            theme.image(stage,"slate",0f,0f,480f,1000f)
+            theme.label(stage,"ОТБОЙ • нажмите в любом месте",15f,920f,450f,45f,23)
+            if(cards!=null)for(i in 0 until cards.size)card(cards.getString(i),25f+(i%8)*54f,812f-(i/8)*105f,48f,72f)
+            if(cards==null||cards.size==0)theme.label(stage,"Отбой пока пуст",20f,500f,440f,60f,25)
+            val close=object : Actor() {}
+            close.setBounds(0f,0f,480f,1000f)
+            close.addListener(object : InputListener() {
+                override fun touchDown(event: InputEvent,x: Float,y: Float,pointer: Int,button: Int): Boolean {
+                    discardOpen=false;build();return true
+                }
+            })
+            stage.addActor(close)
+        }
         if(confirmExit) {
             theme.image(stage,"pixel",0f,0f,480f,1000f).apply {
                 color=Color(0f,0f,0f,0.78f)
@@ -173,7 +197,7 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
             }
             val overlay=theme.image(stage,"slate",20f,355f,440f,285f)
             overlay.touchable=com.badlogic.gdx.scenes.scene2d.Touchable.enabled
-            theme.label(stage,"Сдаться и выйти из комнаты?",35f,535f,410f,75f,24).setWrap(true)
+            theme.label(stage,"Сдаться и выйти? Ставка ${room.getInt("stake",0)} будет проиграна. Доплаты за выход нет.",35f,520f,410f,100f,22).setWrap(true)
             theme.button(stage,"ДА","gold",40f,402f,185f,60f,24){leave(false)}
             theme.button(stage,"НЕТ","blue",255f,402f,185f,60f,24){confirmExit=false;build()}
         }
@@ -184,7 +208,7 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
         theme.font(18).draw(batch,if(room.getBoolean("pass"))"ПЕРЕВОДНОЙ" else "ПОДКИДНОЙ",90f,973f,235f,com.badlogic.gdx.utils.Align.center,false)
         batch.draw(theme.texture(if(room.getBoolean("pass"))"mode_pass" else "mode_throw"),191f,923f,35f,35f)
         theme.font(16).color=Color.WHITE
-        theme.font(16).draw(batch,"Ставка: 0",320f,968f,123f,com.badlogic.gdx.utils.Align.right,false)
+        theme.font(16).draw(batch,"Ставка: ${WagerPolicy.label(room.getInt("stake",0))}",320f,968f,123f,com.badlogic.gdx.utils.Align.right,false)
         batch.draw(theme.texture("coin"),450f,950f,21f,21f)
         theme.font(14).color=Color.valueOf("afbed4")
         theme.font(14).draw(batch,"Код: $code",12f,927f,110f,com.badlogic.gdx.utils.Align.left,false)
@@ -198,29 +222,50 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
             theme.font(30).color=Color.WHITE
             theme.font(30).draw(batch,"$remaining",PortraitTableLayout.DECK_X,PortraitTableLayout.DECK_Y+70f,72f,com.badlogic.gdx.utils.Align.center,false)
         }
+        if(phase=="playing") {
+            val perks=room.get("perks")
+            val prices=listOf(2,if(perks?.getBoolean("discard",false)==true)0 else 3,if(perks?.getBoolean("highlight",false)==true)0 else 1)
+            for((i,cost) in prices.withIndex()) {
+                val x=309f+58f*i
+                theme.font(15).color=Color.valueOf("d6e6ff")
+                theme.font(15).draw(batch,"$cost",x,105f,25f,com.badlogic.gdx.utils.Align.center,false)
+                batch.draw(theme.texture("crystal"),x+25f,90f,14f,16f)
+            }
+            if(locked()) {
+                theme.font(14).color=Color.valueOf("ffcf83")
+                theme.font(14).draw(batch,"Окно отмены хода: 3 сек",15f,263f,450f,com.badlogic.gdx.utils.Align.center,false)
+            }
+        }
         batch.draw(theme.texture("coin"),310f,7f,16f,16f)
         batch.draw(theme.texture("crystal"),399f,7f,16f,16f)
         theme.font(13).color=Color.WHITE
-        theme.font(13).draw(batch,"${game.economy.coins}",331f,22f,66f,com.badlogic.gdx.utils.Align.left,false)
-        theme.font(13).draw(batch,"${game.economy.crystals}",420f,22f,50f,com.badlogic.gdx.utils.Align.left,false)
+        theme.font(13).draw(batch,"${game.online.coins}",331f,22f,66f,com.badlogic.gdx.utils.Align.left,false)
+        theme.font(13).draw(batch,"${game.online.crystals}",420f,22f,50f,com.badlogic.gdx.utils.Align.left,false)
     }
     private fun card(value: String,x: Float,y: Float,w: Float,h: Float): Actor {
         val texture=game.assetManager.get("decks/$deckStyle/$value.png",Texture::class.java)
         val actor=object : Actor() {
             override fun draw(batch: Batch,parentAlpha: Float) {
                 batch.color=Color.WHITE
+                val ownHand=room.get("players").get(room.getInt("seat")).get("hand")
+                val hints=room.get("hints")
+                if(hints!=null&&hints.any{it.asString()==value}&&ownHand.any{it.asString()==value})batch.color=Color(0.65f,1f,0.76f,1f)
                 batch.draw(texture,this.x,this.y,0f,0f,width,height,1f,1f,rotation,0,0,texture.width,texture.height,false,false)
+                batch.color=Color.WHITE
             }
         }
         actor.setBounds(x,y,w*texture.width/360f,h);stage.addActor(actor);return actor
     }
     private fun leave(newTable: Boolean) {
-        // Best-effort departure must not trap the user if the server restarted.
-        game.online.request("POST","/rooms/leave",jsonObject("code" to code),{},{})
-        if(newTable){game.screen=FriendSetupScreen(game);dispose()}else menu()
+        if(busy)return
+        call("POST","/rooms/leave",jsonObject("code" to code,"economyVersion" to 1)) {
+            if(newTable){game.screen=FriendSetupScreen(game);dispose()}else menu()
+        }
     }
+    private fun locked(): Boolean = room.getLong("lockedUntil",0L)>System.currentTimeMillis()+serverOffset
     fun onPlatformBack() { back() }
     override fun back() {
+        if(discardOpen){discardOpen=false;build();return}
         val me=room.get("players").get(room.getInt("seat"))
         if(room.getString("phase")!="playing"||me.getBoolean("out"))leave(false)
         else {confirmExit=!confirmExit;build()}
@@ -233,6 +278,6 @@ internal class NetworkTableScreen(game: OpenFoolGame,private var room: JsonValue
             warnedDeadline=deadline;warningSound?.play(0.8f)
         }
         elapsed+=delta
-        if(elapsed>0.9f&&!busy&&!dragging&&!confirmExit){elapsed=0f;command("/rooms/state")}
+        if(elapsed>0.9f&&!busy&&!dragging&&!confirmExit&&!discardOpen){elapsed=0f;command("/rooms/state")}
     }
 }

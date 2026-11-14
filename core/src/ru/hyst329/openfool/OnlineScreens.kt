@@ -102,17 +102,31 @@ internal class FriendSetupScreen(game: OpenFoolGame) : OnlineScreen(game) {
     private var deckSize=36
     private var pass=false
     private var joining=false
-    init {build()}
+    private var editingBots=false
+    private var stake=game.preferences.getInteger("Network/Stake",250)
+    private var wager: WagerSlider?=null
+    init {build();call("GET","/me"){game.online.updateProfile(it.get("user"));build()}}
     private fun build() {
         base("")
         status.setBounds(20f,126f,440f,43f)
         theme.button(stage,"НАЗАД","slate",20f,924f,110f,48f,18) {
-            if(joining){joining=false;build()}else menu()
+            if(joining||editingBots){joining=false;editingBots=false;build()}else menu()
         }
         theme.button(stage,if(joining)"СОЗДАТЬ СТОЛ" else "ВВЕСТИ КОД","blue",280f,924f,180f,48f,18) {
             joining=!joining;Gdx.input.setOnscreenKeyboardVisible(false);build()
         }
         theme.label(stage,"ИГРА С ДРУЗЬЯМИ",20f,834f,440f,60f,28)
+        theme.label(stage,"Сетевой баланс: ${game.online.coins} монет • ${game.online.crystals} кристаллов",20f,896f,440f,25f,14)
+        if(editingBots) {
+            theme.button(stage,if(addBots)"[X] ДОБАВИТЬ БОТОВ" else "[ ] ДОБАВИТЬ БОТОВ","slate",20f,679f,440f,70f,22) {
+                addBots=!addBots;bots=if(addBots&&capacity>2)1 else 0;build()
+            }
+            if(addBots)for(n in 0..capacity-2)theme.button(stage,"$n",if(n==bots)"purple" else "slate",25f+n*86f,514f,76f,70f,26){bots=n;build()}
+            status.setText("Минимум 2 места людям. Боты используют ту же ставку.")
+            theme.button(stage,"ГОТОВО","green",25f,32f,430f,86f,26){editingBots=false;build()}
+            return
+        }
+
         if(joining) {
             theme.label(stage,"КОД КОМНАТЫ",20f,679f,440f,40f,22)
             val code=field("",580f);code.maxLength=4;code.messageText="4 цифры"
@@ -137,21 +151,21 @@ internal class FriendSetupScreen(game: OpenFoolGame) : OnlineScreen(game) {
         for((index,value) in listOf(false,true).withIndex())theme.button(stage,if(value)"ПЕРЕВОДНОЙ" else "ПОДКИДНОЙ",if(value==pass)"purple" else "slate",20f+index*225f,347f,215f,70f,20) {
             pass=value;build()
         }
-        theme.button(stage,if(addBots)"[X] ДОБАВИТЬ БОТОВ" else "[ ] ДОБАВИТЬ БОТОВ","slate",20f,272f,440f,54f,21) {
-            addBots=!addBots;bots=if(addBots&&capacity>2)1 else 0;build()
+        theme.button(stage,"БОТЫ: ${if(addBots)bots else 0}","slate",145f,924f,120f,48f,17) {
+            stake=wager?.amount?:stake;editingBots=true;build()
         }
-        if(addBots) {
-            theme.label(stage,"Количество ботов (минимум 2 места людям)",20f,234f,440f,29f,15)
-            for(n in 0..capacity-2)theme.button(stage,"$n",if(n==bots)"purple" else "slate",25f+n*86f,178f,76f,48f,22){bots=n;build()}
-        } else theme.label(stage,"Только живые игроки • без ставок",20f,200f,440f,40f,19)
+        wager=WagerSlider(theme,{game.online.coins},stake).also {it.setBounds(20f,175f,440f,155f);stage.addActor(it)}
         theme.button(stage,"СОЗДАТЬ КОМНАТУ","green",25f,32f,430f,86f,26) {
-            call("POST","/rooms",jsonObject("capacity" to capacity,"addBots" to addBots,"bots" to bots,"deckSize" to deckSize,"pass" to pass)) {
+            if(!game.online.supportsEconomy){status.setText("Сначала обновите сервер для ставок и инструментов");return@button}
+            stake=wager?.amount?:stake
+            game.preferences.putInteger("Network/Stake",stake).flush()
+            call("POST","/rooms",jsonObject("capacity" to capacity,"addBots" to addBots,"bots" to bots,"deckSize" to deckSize,"pass" to pass,"stake" to stake)) {
                 game.screen=NetworkTableScreen(game,it.get("room"));dispose()
             }
         }
-        status.setText("Сетевые партии без ставок. Боты — только по вашему выбору.")
+        status.setText("Ставка резервируется при старте. Сдача — проигрыш ставки, без доплаты за выход.")
     }
-    override fun back(){if(joining){joining=false;build()}else menu()}
+    override fun back(){if(joining||editingBots){joining=false;editingBots=false;build()}else menu()}
 }
 
 internal class FriendsScreen(game: OpenFoolGame,private val code: String?=null) : OnlineScreen(game) {
