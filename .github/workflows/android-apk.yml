@@ -21,14 +21,15 @@ jobs:
       - name: Build debug APK
         run: |
           set -o pipefail
-          gradle -p apk-build assembleDebug --stacktrace 2>&1 | tee build.log
+          gradle -p apk-build assembleDebug --console=plain 2>&1 | tee build.log
       - name: Report build errors
         if: failure()
         run: |
           if [ -f build.log ]; then
             python3 - <<'PYCODE'
           from pathlib import Path
-          text = Path('build.log').read_text()[-18000:]
+          text = Path('build.log').read_text()
+          text = '\n'.join(line for line in text.splitlines() if line.startswith('e:') or 'error:' in line or line.startswith('* What') or line.startswith('> ')) or text[-14000:]
           print('::error::' + text.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'))
           PYCODE
           fi

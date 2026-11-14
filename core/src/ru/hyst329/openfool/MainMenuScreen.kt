@@ -42,7 +42,7 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
         }
         theme.button(stage,"НАСТРОЙКИ","slate",323f,25f,143f,44f,16) { settings() }
     }
-    private fun settings() { game.screen = SettingsScreen(game); dispose() }
+    private fun settings() { if (!ready) return; game.screen = SettingsScreen(game); dispose() }
     private fun choosePlayers() {
         theme.image(stage,"lobby",12f,235f,456f,390f)
         theme.label(stage,"ИГРА С БОТАМИ",30f,552f,420f,48f,28)
