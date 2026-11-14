@@ -38,7 +38,7 @@ internal class MainMenuScreen(private val game: OpenFoolGame) : Screen {
         }
         theme.label(stage,"ГЛАВНАЯ",14f,25f,130f,40f,19,Color.valueOf("49e38a"))
         theme.button(stage,"ПРАВИЛА","slate",166f,25f,144f,44f,17) {
-            message = "Выберите карту для хода. Бейте старшей мастью или козырем."
+            message = "Тяните карту на стол для хода или на карту соперника для отбоя."
         }
         theme.button(stage,"НАСТРОЙКИ","slate",323f,25f,143f,44f,16) { settings() }
     }

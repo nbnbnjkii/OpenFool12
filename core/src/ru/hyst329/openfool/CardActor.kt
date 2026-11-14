@@ -22,32 +22,19 @@ internal class CardActor(game: OpenFoolGame, val card: Card, deckStyle: String) 
         back.setOrigin(back.width / 2, back.height / 2)
     }
 
-    override fun positionChanged() {
-        face.setCenter(x + width * scaleX / 2,
-                y + height * scaleY / 2)
-        back.setCenter(x + width * scaleX / 2,
-                y + height * scaleY / 2)
-        super.positionChanged()
-    }
-
-    override fun rotationChanged() {
-        face.rotation = rotation
-        back.rotation = rotation
-        super.rotationChanged()
-    }
-
-    override fun sizeChanged() {
-        face.setSize(width, height)
-        back.setSize(width, height)
-        super.sizeChanged()
-    }
-
+    // Keep Sprite and Actor transforms identical, including rotated/scaled hit testing.
     override fun draw(batch: Batch?, alpha: Float) {
-        super.draw(batch, alpha)
-        face.setScale(this.scaleX, this.scaleY)
-        back.setScale(this.scaleX, this.scaleY)
-        // System.out.printf("actor %s %s %s %s\n", getX(), getY(), getWidth(), getHeight());
-        (if (isFaceUp) face else back).draw(batch!!)
+        val sprite = if (isFaceUp) face else back
+        sprite.setBounds(x, y, width, height)
+        sprite.setOrigin(originX, originY)
+        sprite.setScale(scaleX, scaleY)
+        sprite.rotation = rotation
+        sprite.draw(batch!!, alpha)
+    }
+
+    fun containsStagePoint(stageX: Float, stageY: Float): Boolean {
+        val p = stageToLocalCoordinates(com.badlogic.gdx.math.Vector2(stageX,stageY))
+        return p.x >= 0f && p.x <= width && p.y >= 0f && p.y <= height
     }
 
     fun tint(color: Color) {

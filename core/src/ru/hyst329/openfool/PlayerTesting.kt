@@ -127,8 +127,8 @@ class PlayerTesting(val gameId: Int, val ruleSet: RuleSet, val lowestRank: Rank)
             // Handle when card is beaten
             playersSaidDone = 0
             playerDoneStatuses = BooleanArray(ruleSet.playerCount)
-            var beatIndex = 0
-            while (defenseCards[beatIndex] != null) beatIndex++
+            val beatIndex = if (event.attackIndex >= 0) event.attackIndex else
+                attackCards.indices.firstOrNull { attackCards[it] != null && defenseCards[it] == null } ?: return false
             val beatCard = event.card
             defenseCards[beatIndex] = beatCard
             val beater = event.getTarget() as Player

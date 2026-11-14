@@ -34,9 +34,12 @@ branch, then download the `OpenFool-neon-debug` artifact when the job succeeds.
 
 1. Open lobby; wait until cards finish loading. Rotate/resize: UI remains centred.
 2. Start 2–6 player bot games. A 24-card deck supports at most four players. Check avatars, card counts and trump card.
-3. Attack, cover a card, take cards, finish throwing with БИТО. During animations,
+3. Drag a card from the fan to the table to attack. Drag onto a specific
+   uncovered attack card to cover it (not necessarily the first card). A tap
+   must not play a card; a canceled drag or invalid target must restore it.
+   Take cards or finish throwing with БИТО. During animations,
    action buttons must not submit an extra move. A large hand stays onscreen.
-   In passing mode, tap a matching-rank card before defending; verify the next
+   In passing mode, drag a matching-rank card to empty table space before defending; verify the next
    active defender has enough cards. In throw-in mode, passing must be rejected.
 4. Finish a game, replay, then return to lobby using МЕНЮ or Android Back.
 5. Open settings, choose another card deck, save and start a new game.
@@ -48,3 +51,14 @@ UI fonts are rasterized at 3x virtual size and downscaled with linear mipmap
 filtering. Button PNGs are rendered natively at 1320×288 with antialiased masks.
 The Android unit suite checks standard deck sizes/dealing for 2–6 players and
 passing-mode legality (rank, capacity, membership, full table, defense started).
+
+## Fan and drag controls (0.6.0)
+
+The human hand is laid out as a bounded fan for 1–52 cards. Visible card
+transforms and Scene2D hit testing use the same scale and rotation. One pointer
+can drag one human-owned card at a time; cards in motion and bot turns are
+locked. Legal drop targets are highlighted. Dropping on a covered card, on the
+wrong suit/rank, outside the play area, or canceling touch focus restores the
+hand without a move. In passing mode, drop a matching rank on empty table space
+to transfer rather than cover. Auto-tests cover arbitrary defense indices,
+invalid drops at the rules boundary, fully covered tables, and fan geometry.

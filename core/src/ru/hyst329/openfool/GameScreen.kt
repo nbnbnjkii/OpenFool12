@@ -48,6 +48,13 @@ private val logger = KotlinLogging.logger {}
 
 class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     private val neon = NeonTheme()
+    private val dragLayer = Group()
+    private var draggedCard: CardActor? = null
+    private var dragPointer = -1
+    private var dragStarted = false
+    private var dragStartX = 0f
+    private var dragStartY = 0f
+    private var highlightedTarget: CardActor? = null
     private val background: Texture
     private val backgroundColor: Color
     private val suitSymbols: Map<Suit, Sprite> = mapOf(
@@ -179,31 +186,47 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         val cards = deck.cards
         val listener = object : InputListener() {
             override fun touchDown(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int): Boolean {
-                // don't allow to act while throwing/beating
-                if (gameState == THROWING || gameState == BEATING) return true
-                if (event!!.target is CardActor) {
-                    val cardActor = event.target as CardActor
-                    logger.debug("Trying to click ${cardActor.card}\n")
-                    val card = cardActor.card
-                    val user = players[0]
-                    if (!user.hand.contains(card)) {
-                        System.out.printf("$card is not a user's card\n")
-                        return true
-                    }
-                    if (currentThrower === user) {
-                        user.throwCard(card, attackCards, defenseCards, trumpSuit)
-                        return true
-                    }
-                    if (currentDefender === user) {
-                        val nextPlayerHandSize = nextDefender.hand.size
-                        if (user.cardCanBePassed(card, attackCards, defenseCards, nextPlayerHandSize))
-                            user.passWithCard(card, attackCards, defenseCards, nextPlayerHandSize)
-                        else user.beatWithCard(card, attackCards, defenseCards, trumpSuit)
-                        return true
-                    }
-                    return false
+                val actor = event?.listenerActor as? CardActor ?: return false
+                if (draggedCard != null || button != 0 || !canDrag(actor)) return false
+                draggedCard = actor
+                dragPointer = pointer
+                dragStarted = false
+                dragStartX = event.stageX
+                dragStartY = event.stageY
+                return true
+            }
+            override fun touchDragged(event: InputEvent?, x: Float, y: Float, pointer: Int) {
+                val actor = draggedCard ?: return
+                if (pointer != dragPointer || event == null) return
+                if (!dragStarted) {
+                    if (com.badlogic.gdx.math.Vector2.dst(dragStartX,dragStartY,event.stageX,event.stageY) < 12f) return
+                    dragStarted = true
+                    actor.clearActions()
+                    dragLayer.toFront()
+                    dragLayer.addActor(actor)
+                    actor.rotation = 0f
+                    actor.untint()
                 }
-                return super.touchDown(event, x, y, pointer, button)
+                actor.setPosition(event.stageX - actor.width*actor.scaleX/2,
+                    event.stageY - actor.height*actor.scaleY/2)
+                updateDropHighlight(actor,event.stageX,event.stageY)
+            }
+            override fun touchUp(event: InputEvent?, x: Float, y: Float, pointer: Int, button: Int) {
+                if (pointer != dragPointer) return
+                val actor = draggedCard ?: return
+                val moved = dragStarted
+                draggedCard = null
+                dragPointer = -1
+                clearDropHighlight()
+                // Tap, canceled focus, wrong turn, wrong target, and off-table release all restore the fan.
+                if (event != null && !event.isTouchFocusCancel && moved && canDrag(actor)) {
+                    playDroppedCard(actor,event.stageX,event.stageY)
+                }
+                if (players[0].hand.contains(actor.card)) {
+                    playerGroups[0].addActor(actor)
+                    layoutHumanHand()
+                }
+                tintCards()
             }
         }
         for (i in cards!!.indices) {
@@ -272,13 +295,14 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 " has the lowest trump $lowestTrump")
         currentAttackerIndex = firstAttacker
         currentThrowerIndex = firstAttacker
+        stage.addActor(dragLayer)
         if (screenOrientationIsPortrait) {
             neon.button(stage,"БИТО","green",150f,15f,150f,70f,28) {
-                if (gameState != DRAWING && gameState != THROWING && gameState != BEATING &&
+                if (draggedCard == null && gameState != DRAWING && gameState != THROWING && gameState != BEATING &&
                         currentThrower.index == 0 && attackCards[0] != null) currentThrower.sayDone()
             }
             neon.button(stage,"БЕРУ","gold",315f,15f,150f,70f,28) {
-                if (gameState != DRAWING && gameState != THROWING && gameState != BEATING &&
+                if (draggedCard == null && gameState != DRAWING && gameState != THROWING && gameState != BEATING &&
                         currentDefender.index == 0 && attackCards[0] != null && !isPlayerTaking) currentDefender.sayTake()
             }
             neon.button(stage,"МЕНЮ","slate",15f,920f,80f,46f,16) {
@@ -387,6 +411,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
         game.batch.end()
         // Draw stage
         stage.act(delta)
+        layoutHumanHand()
         stage.draw()
         // Draw player labels
         game.batch.transformMatrix = stage.viewport.camera.view
@@ -404,8 +429,8 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 if (i > 0) f.draw(game.batch,"${players[i].hand.size} карт",x-12f,y-25f,90f,com.badlogic.gdx.utils.Align.center,false)
             }
             neon.font(20).draw(game.batch,"${cardsRemaining()}",388f,778f)
-            val hint = if (isPlayerTaking) "${currentDefender.name} берёт" else if (currentDefender.index == 0) if (ruleSet.allowPass) "Отбейте или переведите картой того же ранга" else "Ваш ход: отбивайтесь" else if (currentThrower.index == 0) "Ваш ход: выберите карту" else "Ход соперника"
-            neon.font(if (ruleSet.allowPass) 15 else 18).draw(game.batch,hint,0f,340f,480f,com.badlogic.gdx.utils.Align.center,false)
+            val hint = if (isPlayerTaking) "${currentDefender.name} берёт" else if (currentDefender.index == 0) if (ruleSet.allowPass) "На карту — отбой; на стол — перевод" else "Перетащите карту на ту, которую отбиваете" else if (currentThrower.index == 0) "Перетащите карту на стол" else "Ход соперника"
+            neon.font(15).draw(game.batch,hint,0f,340f,480f,com.badlogic.gdx.utils.Align.center,false)
         } else {
         for (i in 0 until ruleSet.playerCount) {
             val position = (if (i == 0) playerPosition else aiPosition).clone()
@@ -466,7 +491,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
     }
 
     override fun pause() {
-
+        stage.cancelTouchFocus()
     }
 
     override fun resume() {
@@ -575,7 +600,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
                 for (c in players[0].hand) {
                     val actor = cardActors[c]
                     // If the card cannot beat, grey it out
-                    if (!players[0].cardCanBeBeaten(c, attackCards, defenseCards, trumpSuit))
+                    if (!attackCards.indices.any { players[0].cardCanBeBeaten(c, attackCards, defenseCards, trumpSuit,it) })
                         actor?.tint(Color.GRAY)
                     // If the card can be passed, tint it green
                     if (players[0].cardCanBePassed(c, attackCards, defenseCards, nextDefender.hand.size))
@@ -610,6 +635,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
 
     override fun handle(event: Event): Boolean {
         if (event is Player.CardThrownEvent) {
+            gameState = THROWING
             // Handle when card is thrown
             playersSaidDone = 0
             playerDoneStatuses = BooleanArray(ruleSet.playerCount)
@@ -650,11 +676,12 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             return true
         }
         if (event is Player.CardBeatenEvent) {
+            gameState = BEATING
             // Handle when card is beaten
             playersSaidDone = 0
             playerDoneStatuses = BooleanArray(ruleSet.playerCount)
-            var beatIndex = 0
-            while (defenseCards[beatIndex] != null) beatIndex++
+            val beatIndex = if (event.attackIndex >= 0) event.attackIndex else
+                attackCards.indices.firstOrNull { attackCards[it] != null && defenseCards[it] == null } ?: return false
             val beatCard = event.card
             defenseCards[beatIndex] = beatCard
             val beatCardActor = cardActors[beatCard]
@@ -690,6 +717,7 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             return true
         }
         if (event is Player.CardPassedEvent) {
+            gameState = THROWING
             // Handle when player passes
             playersSaidDone = 0
             playerDoneStatuses = BooleanArray(ruleSet.playerCount)
@@ -838,6 +866,64 @@ class GameScreen(private val game: OpenFoolGame) : Screen, EventListener {
             }
             return players[currentThrowerIndex]
         }
+
+    private fun canDrag(actor: CardActor): Boolean =
+        (gameState == READY || gameState == THROWN || gameState == BEATEN) &&
+        players[0].hand.contains(actor.card) &&
+        (currentThrower.index == 0 || (currentDefender.index == 0 && !isPlayerTaking)) &&
+        actor.actions.size == 0
+
+    private fun onPlayingArea(x: Float,y: Float): Boolean = if (screenOrientationIsPortrait)
+        x in 90f..390f && y in 355f..695f else x in 140f..650f && y in 215f..360f
+
+    private fun attackAt(x: Float,y: Float): Int? = attackCards.indices.reversed().firstOrNull {
+        val card = attackCards[it]
+        card != null && defenseCards[it] == null && cardActors[card]?.containsStagePoint(x,y) == true
+    }
+
+    private fun clearDropHighlight() { highlightedTarget?.untint(); highlightedTarget = null }
+
+    private fun updateDropHighlight(actor: CardActor,x: Float,y: Float) {
+        clearDropHighlight()
+        if (currentDefender.index != 0) return
+        val index = attackAt(x,y) ?: return
+        val user = players[0]
+        if (user.cardCanBeBeaten(actor.card,attackCards,defenseCards,trumpSuit,index) ||
+            user.cardCanBePassed(actor.card,attackCards,defenseCards,nextDefender.hand.size)) {
+            highlightedTarget = cardActors[attackCards[index]]
+            highlightedTarget?.tint(Color.valueOf("9affc5"))
+        }
+    }
+
+    private fun playDroppedCard(actor: CardActor,x: Float,y: Float) {
+        val user = players[0]
+        val card = actor.card
+        if (currentDefender === user && !isPlayerTaking) {
+            val target = attackAt(x,y)
+            if (target != null && user.cardCanBeBeaten(card,attackCards,defenseCards,trumpSuit,target)) {
+                user.beatWithCard(card,attackCards,defenseCards,trumpSuit,target)
+            } else if ((target != null || onPlayingArea(x,y)) &&
+                user.cardCanBePassed(card,attackCards,defenseCards,nextDefender.hand.size)) {
+                user.passWithCard(card,attackCards,defenseCards,nextDefender.hand.size)
+            }
+        } else if (currentThrower === user && onPlayingArea(x,y)) {
+            user.throwCard(card,attackCards,defenseCards,trumpSuit)
+        }
+    }
+
+    private fun layoutHumanHand() {
+        val hand = players[0].hand
+        for ((index,card) in hand.withIndex()) {
+            val actor = cardActors[card] ?: continue
+            if (actor === draggedCard || actor.actions.size > 0) continue
+            val pose = HandFan.pose(index,hand.size,actor.width*cardScalePlayer,
+                actor.height*cardScalePlayer,screenOrientationIsPortrait)
+            actor.setScale(cardScalePlayer)
+            actor.setPosition(pose.x,pose.y)
+            actor.rotation = pose.angle
+            actor.zIndex = index
+        }
+    }
 
     private fun handDelta(index: Int): FloatArray {
         if (index != 0) return aiDelta.clone()

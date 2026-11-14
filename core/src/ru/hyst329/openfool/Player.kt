@@ -22,7 +22,7 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
 
     internal inner class CardThrownEvent(val card: Card) : Event()
 
-    internal inner class CardBeatenEvent(val card: Card) : Event()
+    internal inner class CardBeatenEvent(val card: Card, val attackIndex: Int = -1) : Event()
 
     internal inner class CardPassedEvent(val card: Card) : Event()
 
@@ -295,18 +295,26 @@ class Player internal constructor(private val ruleSet: RuleSet, private var name
     fun cardCanBeBeaten(c: Card,
                         attackCards: Array<Card?>,
                         defenseCards: Array<Card?>,
-                        trumpSuit: Suit): Boolean {
-        val attack = attackCards[Arrays.asList<Card>(*defenseCards).indexOf(null)] ?: return false
+                        trumpSuit: Suit,
+                        attackIndex: Int = attackCards.indices.firstOrNull {
+                            attackCards[it] != null && defenseCards[it] == null
+                        } ?: -1): Boolean {
+        if (attackIndex !in attackCards.indices || attackIndex !in defenseCards.indices ||
+            defenseCards[attackIndex] != null) return false
+        val attack = attackCards[attackIndex] ?: return false
         return hand.contains(c) && c.beats(attack, trumpSuit, ruleSet.deuceBeatsAce)
     }
 
     fun beatWithCard(c: Card,
                      attackCards: Array<Card?>,
                      defenseCards: Array<Card?>,
-                     trumpSuit: Suit) {
-        if (cardCanBeBeaten(c, attackCards, defenseCards, trumpSuit)) {
+                     trumpSuit: Suit,
+                     attackIndex: Int = attackCards.indices.firstOrNull {
+                         attackCards[it] != null && defenseCards[it] == null
+                     } ?: -1) {
+        if (cardCanBeBeaten(c, attackCards, defenseCards, trumpSuit, attackIndex)) {
             hand.remove(c)
-            fire(CardBeatenEvent(c))
+            fire(CardBeatenEvent(c, attackIndex))
         }
     }
 
