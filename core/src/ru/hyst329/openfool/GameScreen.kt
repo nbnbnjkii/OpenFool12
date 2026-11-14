@@ -1003,15 +1003,25 @@ class GameScreen(private val game: OpenFoolGame, private val stake: Int = 0) : S
         // The displayed stake is the actual amount reserved from the local wallet.
         neon.font(16).draw(batch,"Ставка: ${WagerPolicy.label(stake)}",320f,968f,123f,com.badlogic.gdx.utils.Align.right,false)
         batch.draw(neon.texture("coin"),450f,950f,21f,21f)
-        val suit = suitSymbols[trumpSuit]
-        suit?.setBounds(430f,850f,32f,32f)
-        suit?.setScale(1f)
-        suit?.draw(batch)
-        neon.font(15).color = Color.WHITE
-        neon.font(15).draw(batch,"Козырь",413f,908f,65f,com.badlogic.gdx.utils.Align.center,false)
-        neon.font(30).color = Color.WHITE
-        neon.font(30).draw(batch,"${cardsRemaining()}",328f,947f,80f,com.badlogic.gdx.utils.Align.center,false)
-
+        // The exposed bottom card identifies trump until it has been dealt away.
+        if (cardsRemaining()==0 && flow.playing && gameState!=DRAWING) {
+            val suit = suitSymbols[trumpSuit]
+            suit?.setBounds(430f,850f,32f,32f)
+            suit?.setScale(1f)
+            suit?.draw(batch)
+            neon.font(15).color = Color.WHITE
+            neon.font(15).draw(batch,"Козырь",413f,908f,65f,com.badlogic.gdx.utils.Align.center,false)
+        }
+        if (cardsRemaining()>0) {
+            // Center the count ON the back of the pile, not above it.
+            val cx=deckPosition[0]+180f*cardScaleTable
+            val cy=deckPosition[1]+270f*cardScaleTable
+            batch.color=Color(0f,0f,0f,0.65f)
+            batch.draw(neon.texture("pixel"),cx-29f,cy-20f,58f,40f)
+            batch.color=Color.WHITE
+            neon.font(30).color = Color.WHITE
+            neon.font(30).draw(batch,"${cardsRemaining()}",cx-36f,cy+16f,72f,com.badlogic.gdx.utils.Align.center,false)
+        }
 
         val actions = humanActions()
         val hasAction = actions.take || actions.done || actions.give
